@@ -33,7 +33,11 @@ count_rules() {
   local total=0 f n
   for f in "$@"; do
     [ -f "$f" ] || continue
-    n=$(grep -cE '^[[:space:]]*[^#![:space:]]' "$f" 2>/dev/null || echo 0)
+    # `grep -c` ALREADY prints 0 when nothing matches — and exits 1 while doing it.
+    # A `|| echo 0` fallback therefore appends a SECOND zero, making n="0\n0" and
+    # blowing up the arithmetic below. Take grep's output and ignore its status.
+    n=$(grep -cE '^[[:space:]]*[^#![:space:]]' "$f" 2>/dev/null) || true
+    case "$n" in ''|*[!0-9]*) n=0 ;; esac
     total=$((total + n))
   done
   printf '%s' "$total"

@@ -328,6 +328,26 @@ if [ -f "$NOTICE" ]; then
   o=$(nrun "$B" CLAUDEIGNORE_NO_GITIGNORE=1)   # .gitignore holds only a negation -> nothing lost
   [ -z "$o" ] && ok "notice: silent when the ignore files hold no real exclusion (no crying wolf)" \
               || no "notice should not fire when nothing would be lost"
+  # Silence is NOT enough: the original version of this hook was silent because it
+  # CRASHED on that fixture (grep -c prints 0 and exits 1, so a `|| echo 0` fallback
+  # made n="0\n0"). Assert stderr is clean, or a crash reads as correct behaviour.
+  err=$(printf '{"session_id":"t","hook_event_name":"SessionStart"}' \
+    | env -u CLAUDEIGNORE_QUIET -u CLAUDEIGNORE_DISABLED CLAUDEIGNORE_NO_GITIGNORE=1 \
+        CLAUDE_PROJECT_DIR="$B" bash "$NOTICE" 2>&1 >/dev/null)
+  [ -z "$err" ] && ok "notice: exits cleanly (no stderr) on a zero-exclusion project" \
+                || no "notice wrote to stderr: $err"
+  # And a project whose ignore files include an all-comments .git/info/exclude — the
+  # exact shape that triggered the crash in real use.
+  Z=$(mktemp -d); git -C "$Z" init -q; mkdir -p "$Z/s"
+  printf '/s/*\n' > "$Z/.gitignore"; printf '# only a comment\n' > "$Z/.git/info/exclude"
+  err=$(printf '{"session_id":"t","hook_event_name":"SessionStart"}' \
+    | env -u CLAUDEIGNORE_QUIET -u CLAUDEIGNORE_DISABLED CLAUDEIGNORE_NO_GITIGNORE=1 \
+        CLAUDE_PROJECT_DIR="$Z" bash "$NOTICE" 2>&1 >/dev/null)
+  o=$(nrun "$Z" CLAUDEIGNORE_NO_GITIGNORE=1)
+  { [ -z "$err" ] && [ -n "$o" ] && echo "$o" | jq -e '.systemMessage' >/dev/null 2>&1; } \
+    && ok "notice: fires cleanly when a comments-only .git/info/exclude is present" \
+    || no "comments-only info/exclude broke the notice (err='$err')"
+  rm -rf "$Z"
   o=$(nrun "$E4" CLAUDEIGNORE_NO_GITIGNORE=1)  # the rule lives in a NESTED .gitignore
   echo "$o" | grep -q 'innersecrets\|[0-9]' && ok "notice: counts nested .gitignore rules too" \
                                             || no "notice must count nested .gitignore files"
