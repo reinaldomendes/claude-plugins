@@ -17,7 +17,7 @@ what it claims to cover, or a way to make the honest caveat actionable.
 | ~~2~~ | ~~Unbuildable mirror must not fail open~~ | **done 0.5.0** | `_ci_ensure` now returns a third outcome; warn-and-allow, or deny under `CLAUDEIGNORE_STRICT=1`. |
 | 3 | Generate `permissions.deny` from `.claudeignore` | feature | Turns the Bash/Grep caveat from a warning into a next step. |
 | 4 | Scope caveat above the fold | docs | The reader most likely to over-trust the plugin never reaches §Scope. |
-| 5 | Mirror hygiene and identity | **partly done 0.5.1** | Shared-path hijack closed (per-uid 0700 base). Debuggability, collection and the 32-bit key remain. |
+| 5 | Mirror hygiene and identity | **partly done 0.5.1 / 0.5.2** | Shared-path hijack closed (per-uid 0700 base); debuggability closed (README.txt naming the project). Collection declined; 32-bit key remains. |
 | 6 | Spike `Grep` redaction via `PostToolUse` | spike | "Impossible" may be overstated; worth knowing before docs commit to it. |
 | 7 | Quote expansions used as patterns | nit | A project path containing `[` or `*` misbehaves. |
 
@@ -191,10 +191,20 @@ mirrors whose `.ci-root` no longer exists on disk.
 owned by someone else, and treated as *could-not-build* (item 2) rather than as "nothing to
 enforce" when refused. `$EUID` is a bash builtin, so the hot path gains no fork.
 
-**Still open:** the first three bullets. The mirror is still keyed by a bare `cksum`, so it
+**Done in 0.5.2 — debuggability.** Each mirror carries a `README.txt` naming the project it
+belongs to, what the directory is, what each generated file does, and that deleting it is
+safe. That is strictly more useful than the proposed `.ci-root`: the person who finds this
+directory does not yet know what a "mirror" is, so a bare path file answers the second
+question and not the first.
+
+**Collection: declined.** ~134K per project, two per project, `/tmp` clears on reboot.
+Code to prune it would cost more than it saves.
+
+**Still open:** the weak key. The mirror is still keyed by a bare `cksum`, so it
 reveals nothing about which project it belongs to (no `.ci-root`), nothing collects orphans,
 and a 32-bit key can in principle collide. None of those produce a wrong verdict on a
-single-user machine; they are hygiene, and they are why item 5 is not closed.
+single-user machine; the 32-bit key is the only one left, and it is worth noting the fix is
+free — a `cksum` fork and a `sha1sum` fork cost the same, so the objection was never cost.
 
 **Why grouped and ranked below the bugs.** None of these produce a wrong verdict today on a
 single-user machine. They matter because the mirror is the plugin's only piece of hidden

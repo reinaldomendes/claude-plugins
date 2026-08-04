@@ -396,6 +396,19 @@ echo "$o" | jq -r '.hookSpecificOutput.permissionDecisionReason // ""' | grep -q
   || no "symlinked mirror base should be refused (got: $(echo "$o" | head -c 60))"
 [ -z "$(ls -A "$DECOY" 2>/dev/null)" ] && ok "mirror base: nothing was written through the symlink" \
   || no "the guard wrote into the symlink target"
+# A mirror must say what it is and whose it is — otherwise it is an opaque scratch tree
+# with a .git inside, and the only troubleshooting advice possible is "delete it".
+mdir=$(ls -d "$base"/*-merged 2>/dev/null | head -1)
+[ -f "$mdir/README.txt" ] && ok "mirror: carries a README.txt" || no "mirror has no README.txt"
+grep -q "^project : $MB\$" "$mdir/README.txt" 2>/dev/null \
+  && ok "mirror README names the project it belongs to" || no "README should name the project path"
+grep -q 'Safe to delete' "$mdir/README.txt" 2>/dev/null \
+  && ok "mirror README says it is disposable" || no "README should say the mirror is disposable"
+# and it must not disturb matching — the mirror is a git repo the guard queries
+o=$(printf '{"session_id":"s2","tool_input":{"file_path":"%s"}}' "$MB/.env" \
+  | env -u CLAUDEIGNORE_NO_GITIGNORE -u CLAUDEIGNORE_DISABLED TMPDIR="$MBT" CLAUDE_PROJECT_DIR="$MB" bash "$HOOK" 2>/dev/null)
+[ "$(echo "$o" | jq -r '.hookSpecificOutput.permissionDecision // "none"')" = "deny" ] \
+  && ok "mirror README does not affect matching" || no "README broke the verdict"
 rm -rf "$MB" "$MBT" "$MBT2" "$DECOY"
 
 # --- mode switch must invalidate the mirror ------------------------------------------

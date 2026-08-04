@@ -168,6 +168,7 @@ _ci_scan() {
   # makes a first-ever .claudeignore appearing there detectable without a rescan.
   [ "$sawroot" = 0 ] || printf '.\n' >> "$mirror/.ci-dirs"
 
+  _ci_write_readme "$mirror" "$root"
   _ci_sync_info_exclude "$root" "$mirror"
 }
 
@@ -181,6 +182,38 @@ _ci_has_sources() {
         \( -name .claudeignore $(_ci_merge_enabled && printf '%s' "-o -name .gitignore") \) \
         -size +0c -print -quit 2>/dev/null)
   [ -n "$hit" ]
+}
+
+# Leave a README in the mirror saying what this directory is and which project it belongs
+# to. The mirror is keyed by a checksum, so without this it is an opaque scratch tree with
+# a .git inside and no way to work out whose rules it holds — the README's own
+# troubleshooting advice was "delete the whole thing", because inspecting it was
+# impractical. Written once per scan; costs nothing on the per-call path.
+_ci_write_readme() {
+  local mirror="$1" root="$2" mode=merged
+  _ci_merge_enabled || mode=claudeonly
+  cat > "$mirror/README.txt" 2>/dev/null <<EOF
+claudeignore-guard — generated rule mirror. Safe to delete at any time.
+
+project : $root
+mode    : $mode   ($([ "$mode" = merged ] && echo ".gitignore merged with .claudeignore" \
+                                          || echo ".claudeignore only — CLAUDEIGNORE_NO_GITIGNORE=1"))
+
+What this is
+  A scratch git repository holding ONLY this project's ignore rules, so that
+  \`git check-ignore\` can be asked about them without the project's own .gitignore
+  being folded in. Nothing here is your source; it is all copies of ignore files.
+
+    <dir>/.gitignore     the project's .gitignore + .claudeignore, concatenated
+    <dir>/.ci-split      how many of those lines came from .gitignore (provenance)
+    <dir>/*.track        cp -p copies used to detect edits by mtime
+    .ci-dirs             directories being watched for ignore files
+    .ci-stamp            session id that last ran a full discovery scan
+
+Deleting this directory costs one rescan on the next file read. It is rebuilt
+automatically and holds no state you can lose.
+EOF
+  return 0
 }
 
 _ci_sync_info_exclude() {
