@@ -10,7 +10,7 @@
     {
       "name": "claudeignore-guard",
       "source": "./plugins/claudeignore-guard",
-      "description": "Enforces `.claudeignore` — which Claude Code does not support natively — and merges your `.gitignore` in by default, so a repo that already guards its secrets is protected with no setup. Denials name the exact rule and how to override it."
+      "description": "Enforces `.claudeignore` — which Claude Code does not support natively — and merges your `.gitignore` in by default, so a repo that already guards its secrets is protected with no setup. Denials name the exact rule and how to override it. Context hygiene rather than a security boundary: it covers Read/Edit/Write/NotebookEdit, not Bash or Grep, so permissions.deny remains the real boundary for genuinely sensitive paths."
     }
   ]
 }

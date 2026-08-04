@@ -13,7 +13,7 @@ Each plugin documents itself. Follow the link for behavior, configuration, and t
 
 | Plugin | What it does | Activates | Docs |
 |--------|--------------|-----------|------|
-| **claudeignore-guard** | Makes `.claudeignore` actually work — Claude Code has no native support for it — and enforces your `.gitignore` alongside it by default, so a repo that already guards its secrets needs no setup. Denials name the exact rule and the `!` line that would allow it. | automatically | [docs](plugins/claudeignore-guard/docs/README.md) |
+| **claudeignore-guard** | Makes `.claudeignore` actually work — Claude Code has no native support for it — and enforces your `.gitignore` alongside it by default, so a repo that already guards its secrets needs no setup. Denials name the exact rule and the `!` line that would allow it. **Context hygiene, not a security boundary:** covers `Read`/`Edit`/`Write`, not `Bash` or `Grep` — `permissions.deny` is the boundary. | automatically | [docs](plugins/claudeignore-guard/docs/README.md) |
 
 All hooks require `bash` and `jq`, and scope their work to `$CLAUDE_PROJECT_DIR` so they
 never touch an unrelated repo.

@@ -15,7 +15,7 @@ what it claims to cover, or a way to make the honest caveat actionable.
 |---|------|------|-------------------|
 | ~~1~~ | ~~Resolve symlinks before matching~~ | **done 0.5.0** | Fixed; 8 cases in the suite, incl. dir links, broken links and out-of-project links. |
 | ~~2~~ | ~~Unbuildable mirror must not fail open~~ | **done 0.5.0** | `_ci_ensure` now returns a third outcome; warn-and-allow, or deny under `CLAUDEIGNORE_STRICT=1`. |
-| 3 | Generate `permissions.deny` from `.claudeignore` | feature | Turns the Bash/Grep caveat from a warning into a next step. |
+| 3 | Generate `permissions.deny` from `.claudeignore` | **parked** | Planned (see below). Parked pending step 0: whether a `Read()` deny governs `Bash` at all. |
 | ~~4~~ | ~~Scope caveat above the fold~~ | **done 0.5.4** | Callout directly under the tagline, before anything else. |
 | ~~5~~ | ~~Mirror hygiene and identity~~ | **done 0.5.1-0.5.3** | Hijack closed (per-uid 0700), debuggability closed (README.txt), key strengthened (64-bit SHA-1). Collection declined with reason. |
 | 6 | Spike `Grep` redaction via `PostToolUse` | spike | "Impossible" may be overstated; worth knowing before docs commit to it. |
