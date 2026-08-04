@@ -4,8 +4,8 @@ Open-source **Claude Code plugin marketplace**. Small, self-contained hooks and 
 each fix one concrete gap. MIT licensed — no account, org membership, or private access
 required.
 
-Everything here is general-purpose tooling that improves as it changes, so it is installed
-**once per machine and tracks latest**. Nothing here should be pinned per project.
+Everything here is general-purpose tooling, so it is normally installed **once per machine**
+in your user settings rather than per project.
 
 ## Plugins
 
@@ -43,17 +43,15 @@ Or interactively:
 /plugin install claudeignore-guard@reinaldo-open-plugins
 ```
 
-## Why nothing here is pinned
+## Versions
 
-This catalog **floats**: consumers track the default branch and never set `source.ref`.
-Everything in it is a quality gate or a convenience, so landing an improvement early is
-pure upside and leaves no half-finished artifacts behind — there is nothing a consumer
-needs to freeze mid-task.
+**`plugin.json`'s `version` is the release mechanism.** With `autoUpdate` on, a plugin is
+re-fetched only when its version increases — so a change shipped without a bump reaches
+nobody, silently. [`bin/bump.sh`](bin/bump.sh) and the `pre-push` gate exist to make that
+mistake impossible; see [RELEASING.md](RELEASING.md).
 
-The consequence is that **`plugin.json`'s `version` is the release mechanism**: consumers
-only re-fetch a plugin when its version increases. Forgetting to bump it is a silent
-non-release. See [RELEASING.md](RELEASING.md) — `bin/bump.sh` and the `pre-push` gate exist
-to make that mistake impossible.
+Pin to a tag with `"ref"` if you'd rather review changes before they land — that's a
+reasonable thing to want from a third-party marketplace, and tags are published for it.
 
 ## Contributing
 

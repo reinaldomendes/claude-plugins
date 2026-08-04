@@ -8,11 +8,12 @@ list and install, [RELEASING.md](./RELEASING.md) for the versioning contract.
 - **This catalog is public.** Never commit anything project-specific, private, or
   identifying — no client names, internal paths, hostnames, tokens, or repo URLs from
   private work. Examples in docs use neutral placeholders.
-- **Every plugin bumps its own version when its content changes.** The catalog floats, so
-  `plugin.json` `version` *is* the release; the `pre-push` gate rejects a push that skips
-  it. `bin/bump.sh <plugin> [level] [--commit]`.
-- **`bash` + `jq` only.** No npm/python toolchain — a plugin that needs one is a plugin
-  users can't install reliably.
+- **Every plugin bumps its own version when its content changes.** `plugin.json` `version`
+  *is* the release — auto-update re-fetches on nothing else — and the `pre-push` gate
+  rejects a push that skips it. `bin/bump.sh <plugin> [level] [--commit]`.
+- **`bash`, `jq` and `git` only.** No npm/python toolchain — a plugin that needs one is a
+  plugin users can't install reliably. `git` counts as ambient: every Claude Code user has
+  it, and borrowing its gitignore engine beats re-implementing one.
 - **Hooks no-op quietly rather than misfire.** Outside the project, without the tool
   installed, or with nothing to act on, exit 0 silently. A hook that blocks work it
   shouldn't is worse than one that does nothing.

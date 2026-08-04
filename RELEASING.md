@@ -1,24 +1,21 @@
 # Releasing `reinaldo-open-plugins`
 
-How to cut releases of this plugin marketplace. **This catalog floats** — consumers track
-the default branch and never pin it. Everything here is a quality gate or a convenience, so
-landing one early is pure upside and leaves no half-finished artifacts; there is nothing a
-consumer needs to freeze.
+How to cut releases of this plugin marketplace.
 
 ## Versioning model
 
 - **Per-plugin version** — `plugins/<name>/.claude-plugin/plugin.json` → `"version"`
   (semver). This is what Claude Code compares to decide "is there a newer version of this
-  plugin?" for consumers on auto-update. Resolution order: `plugin.json version` →
-  `marketplace.json` entry version → git commit SHA — so **the `plugin.json` version is
-  authoritative**. Bump it and auto-update carries the change to every consumer.
-- **Catalog tag (optional)** — a git tag (`vX.Y.Z`) is useful for *your own*
-  reproducibility and changelog, **not** as a consumer pin contract. Consumers here do not
-  set `source.ref`, so a tag has no effect on what they receive.
+  plugin?" on auto-update. Resolution order: `plugin.json version` → `marketplace.json`
+  entry version → git commit SHA, so **the `plugin.json` version is authoritative**. Bump it
+  and auto-update carries the change to everyone tracking the branch.
+- **Tags (`vX.Y.Z`)** — publish them. This catalog is public, and a consumer who pins
+  `"ref"` to review changes before they land is doing a sensible thing, not a wrong one.
+  Tags are also the changelog anchor for your own reproducibility.
 
-## How consumers use it (floating)
+## How consumers install it
 
-In `~/.claude/settings.json` — **no `ref`**:
+Tracking the branch, with auto-update:
 
 ```json
 "extraKnownMarketplaces": {
@@ -29,13 +26,13 @@ In `~/.claude/settings.json` — **no `ref`**:
 }
 ```
 
-With `ref` omitted it tracks the default branch and `autoUpdate` follows it — updates land
-next session after a short randomized delay.
+Updates land next session after a short randomized delay. Add `"ref": "v1.2.3"` inside
+`source` to freeze on a tag instead — updates then arrive only when the ref is moved.
 
 ## Version-bump tooling
 
-Because the catalog floats, **forgetting to bump a changed plugin's version means no
-consumer ever re-fetches it** — a silent non-release. Two pieces guard against that:
+**Forgetting to bump a changed plugin's version means nobody ever re-fetches it** — a
+silent non-release. Two pieces guard against that:
 
 - **`bin/bump.sh <plugin> [patch|minor|major] [--commit]`** — bumps the version in that
   plugin's `plugin.json` (default `patch`). Pure bash + `jq`, no npm toolchain. With
@@ -71,9 +68,9 @@ git config core.hooksPath .githooks
    git commit -m "feat(<plugin>): <summary>"
    git push
    ```
-   The pre-push gate passes because the version was bumped; floating consumers pick it up
-   automatically on their next session. (Forget the bump and the gate stops you.)
-5. **Tag (optional)** — only if you want a named checkpoint:
+   The pre-push gate passes because the version was bumped; consumers tracking the branch
+   pick it up on their next session. (Forget the bump and the gate stops you.)
+5. **Tag the release** — consumers who pin depend on these existing:
    ```bash
    git tag -a vX.Y.Z -m "reinaldo-open-plugins vX.Y.Z" && git push --follow-tags
    ```
@@ -81,7 +78,7 @@ git config core.hooksPath .githooks
 ## Conventions
 
 - The **`plugin.json` version is the release unit**; bump it for every user-visible change.
-  A catalog tag is a convenience, not a requirement.
+  A tag marks the same point for anyone pinning to it.
 - Each plugin keeps its **own** semver; versions need not match each other or any tag.
 - Don't move a **published** tag — cut a new one. (Unpushed tags are yours to move.)
 - **A plugin below `1.0.0`** is signalling that its behavior may still change without a
@@ -95,4 +92,4 @@ git config core.hooksPath .githooks
 - [ ] `bash test/run-tests.sh` green
 - [ ] Docs updated — a plugin's `docs/README.md` states its **scope and its limits**
 - [ ] Committed and pushed to the default branch (pre-push gate passes)
-- [ ] (optional) named checkpoint tag `vX.Y.Z` pushed
+- [ ] tag `vX.Y.Z` pushed (what pinned consumers resolve against)
