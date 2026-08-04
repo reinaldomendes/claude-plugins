@@ -20,7 +20,7 @@ Tracking the branch, with auto-update:
 ```json
 "extraKnownMarketplaces": {
   "reinaldo-open-plugins": {
-    "source": { "source": "git", "url": "https://github.com/reinaldomendes/reinaldo-open-plugins.git" },
+    "source": { "source": "git", "url": "https://github.com/reinaldomendes/claude-plugins.git" },
     "autoUpdate": true
   }
 }

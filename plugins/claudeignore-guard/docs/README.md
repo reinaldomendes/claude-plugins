@@ -157,7 +157,7 @@ something you need is silently unreadable.
 ## Install
 
 ```text
-/plugin marketplace add https://github.com/reinaldomendes/reinaldo-open-plugins
+/plugin marketplace add https://github.com/reinaldomendes/claude-plugins
 /plugin install claudeignore-guard@reinaldo-open-plugins
 ```
 

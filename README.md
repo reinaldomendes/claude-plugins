@@ -26,7 +26,7 @@ Add to your **user** settings, `~/.claude/settings.json`:
 {
   "extraKnownMarketplaces": {
     "reinaldo-open-plugins": {
-      "source": { "source": "git", "url": "https://github.com/reinaldomendes/reinaldo-open-plugins.git" },
+      "source": { "source": "git", "url": "https://github.com/reinaldomendes/claude-plugins.git" },
       "autoUpdate": true
     }
   },
@@ -39,7 +39,7 @@ Add to your **user** settings, `~/.claude/settings.json`:
 Or interactively:
 
 ```text
-/plugin marketplace add https://github.com/reinaldomendes/reinaldo-open-plugins
+/plugin marketplace add https://github.com/reinaldomendes/claude-plugins
 /plugin install claudeignore-guard@reinaldo-open-plugins
 ```
 
