@@ -71,8 +71,10 @@ cat > "$T/.claudeignore" <<'EOF'
 .env.*
 !.env.example
 env/.env.*
-/dist
+dist/*
 !dist/client/
+/build
+!build/keep/
 node_modules/
 src/**/*.secret
 logs/
@@ -80,7 +82,7 @@ logs/
 EOF
 printf '!important.key\n' > "$T/pkg/.claudeignore"
 for f in .env .env.production .env.example foo.local env/.env.esf-us dist/app.js dist/client/a.js \
-         node_modules/pkg/index.js src/deep/a.secret src/deep/a.ts logs/out.txt README.md \
+         node_modules/pkg/index.js src/deep/a.secret src/deep/a.ts logs/out.txt README.md build/keep/x.js \
          a.key pkg/important.key pkg/sub/other.key; do
   mkdir -p "$(dirname "$T/$f")"; touch "$T/$f"
 done
@@ -93,8 +95,11 @@ mcase .env.production          ignored
 mcase .env.example             allowed   # negation, last match wins
 mcase foo.local                ignored
 mcase env/.env.esf-us          ignored   # unanchored basename glob at depth
-mcase dist/app.js              ignored   # anchored /dist hides its contents
-mcase dist/client/a.js         allowed   # re-included subdirectory
+mcase dist/app.js              ignored   # dist/* hides the contents
+mcase dist/client/a.js         allowed   # `dir/*` + `!dir/keep/` — the idiom that DOES re-include
+mcase build/keep/x.js          ignored   # `/build` excludes the dir itself, so nothing inside can be
+                                         # re-included — gitignore(5). The `dir/*` form above is the
+                                         # only one that works; this case pins the difference.
 mcase node_modules/pkg/index.js ignored  # dir-only rule
 mcase src/deep/a.secret        ignored   # ** crosses directories
 mcase src/deep/a.ts            allowed

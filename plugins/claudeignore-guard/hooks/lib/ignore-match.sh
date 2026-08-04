@@ -1,135 +1,84 @@
 #!/bin/bash
-# ignore-match.sh — gitignore-syntax matching for `.claudeignore` files.
+# ignore-match.sh — decide whether a path is excluded by a `.claudeignore`.
 #
-# Why hand-rolled instead of `git check-ignore`: that command always applies the
-# repo's real `.gitignore` on top of whatever you point `core.excludesFile` at, so
-# every build artifact the repo already ignores (dist/, coverage/, generated
-# sources) would come back as "ignored" too. There is no way to ask git to honour
-# ONE ignore file in isolation, and over-blocking a generated file Claude legitimately
-# needs is worse than the reimplementation.
+# There is no pattern matching in this file. Git already implements gitignore
+# semantics — negation, anchoring, `**`, directory-only rules, nested files,
+# precedence — and re-implementing that in bash means owning every subtle
+# difference forever. So git does the matching, on a MIRROR.
 #
-# Semantics implemented, following gitignore(5):
-#   - blank lines and `#` comments are skipped; `\#` escapes a literal hash
-#   - `!pat` re-includes; LAST matching pattern wins
-#   - a trailing `/` matches directories only
-#   - a `/` anywhere but the end anchors the pattern to the .claudeignore's directory;
-#     otherwise the pattern matches a basename at any depth
-#   - `*` and `?` do not cross `/`; `**` does
-#   - excluding a directory excludes everything under it
+# The mirror exists because git cannot be asked to honour one ignore file in
+# isolation: `git check-ignore` always folds in the repo's own `.gitignore`, so
+# every build artifact the repo already ignores (dist/, coverage/, node_modules/)
+# would come back "ignored" and Claude would be blocked from files it needs.
 #
-# Nested `.claudeignore` files are honoured: files from the project root down to the
-# target's own directory are applied in that order, each relative to its own directory,
-# so a deeper file's rule wins — the same precedence git gives nested .gitignore files.
+# So: copy each `.claudeignore` into a scratch tree at the same relative path,
+# named `.gitignore`, and ask git about THAT tree. Nothing else lives there, so
+# the answer reflects `.claudeignore` and nothing else.
+#
+#   project/                     mirror/
+#     .claudeignore        →       .gitignore
+#     pkg/.claudeignore    →       pkg/.gitignore
+#
+# `check-ignore` evaluates paths as strings, so this also answers for files that
+# do not exist yet — a `Write` to a new path is covered, which a worktree scan
+# (`git ls-files`) cannot do.
 
-# Convert one gitignore pattern body into an anchored ERE.
-# Deliberately character-by-character: converting via sed risks a replacement being
-# re-substituted by a later rule.
-_ci_pattern_to_regex() {
-  local pat="$1" out="" i=0 c next
-  local len=${#pat}
-  while [ "$i" -lt "$len" ]; do
-    c="${pat:$i:1}"
-    case "$c" in
-      '*')
-        next="${pat:$((i+1)):1}"
-        if [ "$next" = "*" ]; then
-          # `**/` → any number of leading dirs; `/**` or bare `**` → anything
-          if [ "${pat:$((i+2)):1}" = "/" ]; then
-            out+="(.*/)?"; i=$((i+3)); continue
-          fi
-          out+=".*"; i=$((i+2)); continue
-        fi
-        out+="[^/]*"; i=$((i+1)); continue
-        ;;
-      '?')  out+="[^/]" ;;
-      '\')
-        # escape sequence: take the next char literally
-        next="${pat:$((i+1)):1}"
-        [ -n "$next" ] && out+="\\$next" && i=$((i+2)) && continue
-        out+="\\\\"
-        ;;
-      # ERE metacharacters that must survive as literals
-      '.'|'+'|'('|')'|'|'|'^'|'$'|'{'|'}') out+="\\$c" ;;
-      '['|']') out+="$c" ;;   # character classes pass through as-is
-      *) out+="$c" ;;
-    esac
-    i=$((i+1))
-  done
-  printf '%s' "$out"
+# Directories never worth descending into to find a .claudeignore.
+_CI_PRUNE=( -name .git -o -name node_modules -o -name vendor -o -name .netlify )
+
+# Path of the mirror tree for a project root.
+_ci_mirror_dir() {
+  printf '%s/claudeignore-guard/%s' \
+    "${TMPDIR:-/tmp}" "$(printf '%s' "$1" | cksum | cut -d' ' -f1)"
+}
+
+# Mirror every .claudeignore under $1 into a scratch git tree. Cheap: a handful of
+# tiny copies. Stale entries are cleared first so a deleted .claudeignore stops
+# applying. Echoes the mirror path; returns non-zero if there is nothing to mirror.
+_ci_sync_mirror() {
+  local root="$1" mirror rel found=1
+  mirror=$(_ci_mirror_dir "$root")
+
+  mkdir -p "$mirror" 2>/dev/null || return 1
+  [ -d "$mirror/.git" ] || git -C "$mirror" init -q 2>/dev/null || return 1
+  find "$mirror" -name .gitignore -delete 2>/dev/null
+
+  while IFS= read -r rel; do
+    found=0
+    mkdir -p "$mirror/$(dirname "$rel")" 2>/dev/null || continue
+    cp "$root/$rel" "$mirror/${rel%.claudeignore}.gitignore" 2>/dev/null || continue
+  done < <(cd "$root" && find . \( "${_CI_PRUNE[@]}" \) -prune -o -name .claudeignore -printf '%P\n' 2>/dev/null)
+
+  [ "$found" = 0 ] || return 1
+  printf '%s' "$mirror"
 }
 
 # ci_is_ignored <abs-file-path> <project-root>
-# Returns 0 when the path is ignored, 1 otherwise.
-# Echoes the winning "<ignorefile>:<lineno>:<pattern>" on stdout when ignored, so
-# callers can tell the user WHICH rule blocked them.
+# Returns 0 when the path is excluded, 1 otherwise.
+# On a match, echoes "<.claudeignore path>:<line>: <pattern>" so the caller can
+# tell the user exactly which rule blocked them.
 ci_is_ignored() {
-  local target="$1" root="$2"
-  local ignored=1 why=""
+  local target="$1" root="$2" mirror rel verdict
+  command -v git >/dev/null 2>&1 || return 1
 
-  case "$target" in "$root"/*) ;; *) return 1 ;; esac
+  # Only ever judge paths inside the project.
+  case "$target" in "$root"/*) rel="${target#$root/}" ;; *) return 1 ;; esac
 
-  # Every directory from the root down to the file's own, in that order.
-  local rel_dir dirs=("$root") cur="$root"
-  rel_dir="${target#$root/}"; rel_dir="$(dirname "$rel_dir")"
-  if [ "$rel_dir" != "." ]; then
-    local IFS='/' part
-    for part in $rel_dir; do cur="$cur/$part"; dirs+=("$cur"); done
-  fi
+  mirror=$(_ci_sync_mirror "$root") || return 1
 
-  local base ignorefile rel candidates cand pat neg dironly anchored rx lineno
-  for base in "${dirs[@]}"; do
-    ignorefile="$base/.claudeignore"
-    [ -f "$ignorefile" ] || continue
-    case "$target" in "$base"/*) rel="${target#$base/}" ;; *) continue ;; esac
+  # The verdict comes from -q, NOT from -v. With -v, git exits 0 for ANY matching
+  # rule *including a negation*, so `!.env.example` would read as "ignored". Only
+  # -q means "this path is excluded".
+  git -C "$mirror" check-ignore -q --no-index -- "$rel" 2>/dev/null || return 1
 
-    # the path plus every ancestor, so a rule matching a parent dir hides its contents
-    candidates=("$rel"); cand="$rel"
-    while [ "$(dirname "$cand")" != "." ]; do cand="$(dirname "$cand")"; candidates+=("$cand"); done
+  # Excluded for sure; now re-ask with -v purely to recover which rule did it.
+  # "<ignorefile>:<line>:<pattern>\t<path>"
+  verdict=$(git -C "$mirror" check-ignore -v --no-index -- "$rel" 2>/dev/null)
+  [ -n "$verdict" ] || { printf 'a .claudeignore rule'; return 0; }
 
-    lineno=0
-    while IFS= read -r pat || [ -n "$pat" ]; do
-      lineno=$((lineno+1))
-      # strip trailing whitespace that isn't escaped, then skip blanks/comments
-      pat="${pat%"${pat##*[![:space:]]}"}"
-      [ -z "$pat" ] && continue
-      case "$pat" in \#*) continue ;; '\#'*) pat="${pat#\\}" ;; esac
-
-      neg=0; case "$pat" in '!'*) neg=1; pat="${pat#!}" ;; esac
-      [ -z "$pat" ] && continue
-      dironly=0; case "$pat" in */) dironly=1; pat="${pat%/}" ;; esac
-      [ -z "$pat" ] && continue
-
-      anchored=0
-      case "$pat" in
-        /*) anchored=1; pat="${pat#/}" ;;
-        */*) anchored=1 ;;
-      esac
-      [ -z "$pat" ] && continue
-
-      rx="$(_ci_pattern_to_regex "$pat")"
-
-      local hit=0
-      for cand in "${candidates[@]}"; do
-        if [ "$anchored" = 1 ]; then
-          [[ "$cand" =~ ^${rx}$ ]] || continue
-        else
-          # unanchored: match the basename at any depth
-          [[ "$cand" =~ ^(.*/)?${rx}$ ]] || continue
-        fi
-        # a directory-only rule may not match the target itself unless it IS a directory
-        if [ "$dironly" = 1 ] && [ "$cand" = "$rel" ] && [ ! -d "$base/$rel" ]; then
-          continue
-        fi
-        hit=1; break
-      done
-
-      if [ "$hit" = 1 ]; then
-        if [ "$neg" = 1 ]; then ignored=1; why=""
-        else ignored=0; why="${ignorefile}:${lineno}: ${pat}"; fi
-      fi
-    done < "$ignorefile"
-  done
-
-  [ "$ignored" = 0 ] && printf '%s' "$why"
-  return "$ignored"
+  # Report the rule against the real file the user edits, not the mirror copy.
+  verdict="${verdict%%$'\t'*}"
+  verdict="${verdict/#.gitignore:/.claudeignore:}"
+  verdict="${verdict//\/.gitignore:/\/.claudeignore:}"
+  printf '%s' "$verdict"
 }

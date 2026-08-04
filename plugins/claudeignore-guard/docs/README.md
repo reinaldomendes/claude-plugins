@@ -59,9 +59,41 @@ path — Claude opening `.env` while exploring — and nothing more. For a hard 
 The two compose well: `permissions.deny` for the handful of paths that must never be read,
 `.claudeignore` for the long tail of noise you merely want out of context.
 
+## How it matches: git does it, on a mirror
+
+There is no pattern matching in this plugin. **Git implements gitignore semantics; this
+plugin borrows them** rather than re-implementing negation, anchoring, `**`, directory
+rules and precedence in bash and owning every subtle difference forever.
+
+The obstacle is that git cannot be asked to honour one ignore file in isolation —
+`git check-ignore` always folds in the repo's own `.gitignore`, so every artifact the repo
+already ignores (`dist/`, `coverage/`, `node_modules/`) would come back "ignored" and Claude
+would be blocked from files it legitimately needs.
+
+So each `.claudeignore` is copied into a scratch tree at the same relative path, named
+`.gitignore`, and git is asked about **that** tree:
+
+```text
+project/                      mirror/            (in $TMPDIR, rebuilt per call)
+  .claudeignore         →       .gitignore
+  pkg/.claudeignore     →       pkg/.gitignore
+```
+
+Nothing else lives there, so the answer reflects `.claudeignore` and nothing else. Two
+properties fall out for free:
+
+- **Nested files and precedence** are git's own, not an approximation.
+- **Paths that don't exist yet are answered correctly**, because `check-ignore` evaluates
+  path strings. A `Write` to a new ignored path is caught — a worktree scan
+  (`git ls-files`) cannot do that, which is why it isn't used here.
+
+The verdict comes from `check-ignore -q`. With `-v`, git exits **0 for any matching rule
+including a negation**, so `!.env.example` would read as "ignored"; `-v` is used only
+afterwards, to recover which rule matched for the message.
+
 ## Supported syntax
 
-Full gitignore semantics, per `gitignore(5)`:
+Whatever `gitignore(5)` says, because git is doing the matching:
 
 | Pattern | Meaning |
 |---------|---------|
@@ -75,18 +107,25 @@ Full gitignore semantics, per `gitignore(5)`:
 
 Excluding a directory excludes everything under it, so `dist` alone hides `dist/a/b.js`.
 
-**Nested `.claudeignore` files are honoured.** Files from the project root down to the
-target's own directory are applied in that order, each relative to its own directory — so a
-deeper file's rule wins, exactly as git treats nested `.gitignore` files. A `!important.key`
-in `pkg/.claudeignore` re-includes that one file under a root-level `*.key`.
+**Nested `.claudeignore` files are honoured**, each relative to its own directory, so a
+deeper file's rule wins. A `!important.key` in `pkg/.claudeignore` re-includes that one file
+under a root-level `*.key`.
 
-### Why not `git check-ignore`
+### The re-include trap
 
-Because it always applies the repo's real `.gitignore` on top of whatever you point
-`core.excludesFile` at. Every artifact the repo already ignores — `dist/`, `coverage/`,
-generated sources — would come back as "ignored" too, and Claude would be blocked from
-files it legitimately needs. Git offers no way to honour one ignore file in isolation, so
-the matcher is hand-rolled in [`lib/ignore-match.sh`](../hooks/lib/ignore-match.sh).
+`gitignore(5)`: *"It is not possible to re-include a file if a parent directory of that file
+is excluded."* Only one of these two does what it looks like:
+
+```gitignore
+/dist            # excludes the dist DIRECTORY …
+!dist/client/    # … so this re-includes nothing. dist/client/a.js stays blocked.
+
+dist/*           # excludes dist's CONTENTS, dist itself is not excluded …
+!dist/client/    # … so this works. dist/client/a.js is readable.
+```
+
+Both forms are pinned in the test suite, because the difference is invisible until
+something you need is silently unreadable.
 
 ## Install
 
@@ -143,12 +182,13 @@ plugins/claudeignore-guard/
   hooks/
     hooks.json               # PreToolUse(Read|Edit|Write|NotebookEdit)
     claudeignore-guard.sh    # decision + denial message
-    lib/ignore-match.sh      # gitignore-syntax matcher
+    lib/ignore-match.sh      # mirrors .claudeignore files and asks git check-ignore
 ```
 
 ## Requirements
 
-`bash` and `jq`. Nothing is installed on your behalf.
+`bash`, `jq` and `git` — git does the pattern matching, so it is required even when the
+project itself is not a git repository. Nothing is installed on your behalf.
 
 ---
 
