@@ -150,6 +150,71 @@ user's configuration and could deny paths they still need; the deny list is also
 thing that belongs in review and version control. Printing by default and merging on request
 keeps the decision where it belongs.
 
+### Plan
+
+**Step 0 — settle what this actually buys, before writing any of it.**
+
+The item's stated rationale is that it closes the `Bash`/`Grep` gap "through the boundary the
+harness actually enforces". That rationale is **unverified and probably wrong in part**.
+`Read(./.env)` is a rule on the *Read tool*; `Bash` takes command-pattern rules
+(`Bash(cat:*)`), and `Grep` is a third tool again. If a `Read()` deny does not govern `Bash`,
+generating deny rules does **not** close the Bash gap — it gives defence-in-depth for `Read`
+that survives the plugin being disabled, misconfigured, or unable to build its mirror. Worth
+having, but a different claim; shipping the wrong one would repeat the exact over-promise
+this plugin exists to correct.
+
+Two experiments, both cheap, both needing a session restart:
+
+1. Put `"deny": ["Read(./.env)"]` in a scratch project's `.claude/settings.local.json` and
+   confirm `Read` is denied — expected; seen once already.
+2. In that same session run `cat .env` through `Bash`. **If it succeeds, the Bash gap stays
+   open**, and both the command's output and the README must say so.
+
+Also unverified: whether `Read(./**/.env)` matches at any depth, and whether character
+classes are supported. The translation table depends on both.
+
+**Step 1 — the translator, as a library.** `hooks/lib/to-deny.sh`, testable without a live
+session. Input: the ignore files `_ci_scan` already discovers. Output: two lists — translated,
+and refused-with-reason.
+
+| gitignore | `permissions.deny` | note |
+|---|---|---|
+| `.env` (unanchored) | `Read(./**/.env)` | any depth — **verify** |
+| `/dist` | `Read(./dist)` + `Read(./dist/**)` | anchored to its own ignore file's directory |
+| `logs/` | `Read(./logs/**)` | directory rule |
+| `*.key` | `Read(./**/*.key)` | basename glob |
+| `src/**/*.secret` | `Read(./src/**/*.secret)` | near-direct |
+| nested `pkg/.claudeignore` | prefix each pattern with `pkg/` | anchoring is per file |
+| `!anything` | **refused** | deny rules have no negation |
+| any rule a negation could alter | **refused** | see below |
+
+**The negation rule is the whole design.** `dist/*` + `!dist/client/` naively becomes
+`Read(./dist/**)`, which blocks `dist/client` — a path the user deliberately re-included.
+That is **worse than emitting nothing**: it silently denies access they asked for, and they
+will blame Claude Code rather than the generated rule. Under-generating is recoverable;
+over-generating is a trap.
+
+**Step 2 — the command.** `commands/claudeignore-deny.md`, invoked as `/claudeignore-deny`:
+
+- prints the JSON block plus a **refused** section naming each skipped rule and why;
+- `--merge` writes to `.claude/settings.local.json` (never the shared, version-controlled
+  `settings.json`), preserving and deduplicating existing entries;
+- when everything was refused, says so instead of printing an empty block that reads like
+  "nothing to protect".
+
+**Step 3 — docs.** Scope currently ends at "use `permissions.deny`". It gains the command,
+and — depending on step 0 — either "this closes the Bash gap" or "this does not close the
+Bash gap; it hardens `Read` against the plugin itself failing".
+
+**Tests.** Every row of the table; a negation refusing its neighbourhood; nested-file
+prefixing; `--merge` preserving unrelated entries; the all-refused case; and a fixture taken
+from a real `.claudeignore` — this repo's has `!dist/client/`, so it exercises refusal
+immediately.
+
+**Order.** Step 0 first, alone. If `Read()` deny does govern `Bash`, item 3 is the most
+valuable item left. If not, it is still worth building — but the README wording changes, and
+item 6's spike becomes more interesting rather than less.
+
 ---
 
 ## 4. Move the scope caveat above the fold
