@@ -211,6 +211,14 @@ The verdict comes from `check-ignore -q`. With `-v`, git exits **0 for any match
 including a negation**, so `!.env.example` would read as "ignored"; `-v` runs only
 afterwards, to recover which rule matched.
 
+**Your global ignore counts in merge mode.** The mirror is a git repository, so
+`check-ignore` reads `core.excludesFile` (`~/.config/git/ignore` by default) there as it
+does anywhere else. Merge mode keeps that — merge means *enforce what git ignores*, and git
+ignores it — and a denial from it says so explicitly instead of blaming a project file.
+**`CLAUDEIGNORE_NO_GITIGNORE=1` suppresses it**, because that flag promises `.claudeignore`
+alone; a machine-level file quietly narrowing what Claude can read is exactly the surprise
+the opt-out exists to remove.
+
 **Symlinks are resolved.** `Read` follows links while the hook matches path strings, so the
 literal path is judged first and the resolved path second — a link to an excluded file is
 denied. Judging the literal path first keeps every denial quoting the rule against the path
@@ -297,7 +305,7 @@ immediately.
 | Var | Default | Effect |
 |-----|---------|--------|
 | `CLAUDEIGNORE_DISABLED` | `0` | `1` = hook off entirely |
-| `CLAUDEIGNORE_NO_GITIGNORE` | `0` | `1` = ignore `.gitignore` and `.git/info/exclude`; honour `.claudeignore` alone |
+| `CLAUDEIGNORE_NO_GITIGNORE` | `0` | `1` = ignore `.gitignore`, `.git/info/exclude` and your global `core.excludesFile`; honour `.claudeignore` alone |
 | `CLAUDEIGNORE_MODE` | `deny` | `warn` = allow the call but attach the reason. Useful while tuning patterns |
 | `CLAUDEIGNORE_QUIET` | `0` | `1` = hide the `SessionStart` notice from **you**; Claude is still told. Use `CLAUDEIGNORE_DISABLED=1` to silence it entirely |
 | `CLAUDEIGNORE_STRICT` | `0` | `1` = **deny** reads when the rule mirror cannot be built, instead of warning and allowing |

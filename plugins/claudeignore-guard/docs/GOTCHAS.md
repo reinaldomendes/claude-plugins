@@ -157,3 +157,32 @@ made" inside it.
 
 Related: `systemMessage` renders in the terminal CLI **only**; the VS Code / Cursor extension
 displays nothing. `initialUserMessage` renders on both.
+
+---
+
+## 9. The mirror inherits your global `core.excludesFile` — nobody chose that
+
+The mirror is a git repository, so `git check-ignore` reads the user's global excludes file
+(`~/.config/git/ignore`) inside it exactly as in any other repo. It arrived free with
+borrowing git's engine and went unnoticed through nine releases, while this plugin's own
+design notes stated the opposite: *"Global `core.excludesFile` is **not** read."* The code
+had been reading it the whole time.
+
+Measured with a fixture injecting a global ignore via `XDG_CONFIG_HOME`, a project whose
+`.claudeignore` held only `/mine.txt`, and a `global-only.txt` covered by neither:
+
+| mode | `mine.txt` | `global-only.txt` |
+|---|---|---|
+| merge (default) | denied | **denied** — by a file the project never mentions |
+| isolated (`CLAUDEIGNORE_NO_GITIGNORE=1`) | denied | **denied** — the opt-out did not opt out |
+
+Merge mode's row is defensible and now documented: merge means *enforce what git ignores*.
+The isolated row was a real bug — the flag promises `.claudeignore` alone. Fixed in 0.5.13
+by querying with `-c core.excludesFile=/dev/null` when merge is off.
+
+**Two lessons worth more than the fix.** A wrapper inherits its engine's ambient
+configuration whether or not you decided anything, so *"we don't read X"* is a claim about
+code you wrote, never about behaviour you get. And the whole test suite passed throughout:
+every case ran in an environment where no global ignore existed, so the contamination had
+nothing to contaminate. This was found by a user's real `git check-ignore -v` output naming
+`/home/…/.config/git/ignore`, not by the suite.

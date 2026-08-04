@@ -36,6 +36,19 @@ _CI_PRUNE=( -name .git -o -name node_modules -o -name vendor -o -name .netlify )
 # Is the project's own .gitignore merged in? Default yes.
 _ci_merge_enabled() { [ "${CLAUDEIGNORE_NO_GITIGNORE:-0}" != "1" ]; }
 
+# The mirror is itself a git repository, so `git check-ignore` reads the user's global
+# core.excludesFile there exactly as it does in any other repo — nobody chose that, it came
+# free with borrowing git's engine, and it went unnoticed until a project file that only the
+# global ignore covered came back denied.
+#
+# Merge mode KEEPS it: merge means "enforce what git ignores", and git ignores it. Isolated
+# mode must NOT — CLAUDEIGNORE_NO_GITIGNORE=1 promises .claudeignore alone, and a machine-level
+# file silently narrowing what Claude can read is the surprise that opt-out exists to remove.
+# /dev/null is an empty, always-present excludes file.
+_ci_excludes_opt() {
+  _ci_merge_enabled || printf '%s' '-c core.excludesFile=/dev/null'
+}
+
 # The candidate names, in merge order, as an ARRAY set once per invocation.
 # Everything on the per-call path avoids `$( )`: a command substitution forks, and
 # at ~1ms a fork the freshness loop was costing 30× the git query it protects.
@@ -337,6 +350,12 @@ _ci_attribute() {
   # info/exclude is copied verbatim, so it needs no translation.
   case "$file" in .git/info/exclude) printf '%s:%s:%s' "$file" "$line" "$pat"; return 0 ;; esac
 
+  # An ABSOLUTE path means git blamed a file outside the mirror — in practice the user's
+  # global core.excludesFile, which merge mode honours (see _ci_excludes_opt). It is not a
+  # project file and has no .ci-split, so report it verbatim rather than translating it into
+  # a nonexistent "<abspath>/.claudeignore".
+  case "$file" in /*) printf '%s:%s:%s (your global git excludes file)' "$file" "$line" "$pat"; return 0 ;; esac
+
   dir="${file%/.gitignore}"; [ "$dir" = "$file" ] && dir="."
   split=$(cat "$mirror/${dir#./}/.ci-split" 2>/dev/null)
   [ "$dir" = "." ] && split=$(cat "$mirror/.ci-split" 2>/dev/null)
@@ -375,10 +394,10 @@ ci_is_ignored() {
   # The verdict comes from -q, NOT from -v. With -v, git exits 0 for ANY matching
   # rule *including a negation*, so `!.env.example` would read as "ignored". Only
   # -q means "this path is excluded".
-  git -C "$mirror" check-ignore -q --no-index -- "$rel" 2>/dev/null || return 1
+  git -C "$mirror" $(_ci_excludes_opt) check-ignore -q --no-index -- "$rel" 2>/dev/null || return 1
 
   # Excluded for sure; now re-ask with -v purely to recover which rule did it.
-  verdict=$(git -C "$mirror" check-ignore -v --no-index -- "$rel" 2>/dev/null)
+  verdict=$(git -C "$mirror" $(_ci_excludes_opt) check-ignore -v --no-index -- "$rel" 2>/dev/null)
   [ -n "$verdict" ] || { printf 'an ignore rule'; return 0; }
 
   _ci_attribute "$mirror" "${verdict%%$'\t'*}"

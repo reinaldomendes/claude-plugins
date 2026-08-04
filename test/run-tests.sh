@@ -442,6 +442,33 @@ for weird in 'weird[1]*dir' 'a?b' 'x[!y]z'; do
   rm -rf "$(dirname "$GP")"
 done
 
+# --- the global ignore (core.excludesFile) --------------------------------------------
+# The mirror is itself a git repo, and git reads core.excludesFile for EVERY repo — so the
+# user's global ignore leaked into the verdict without anyone deciding it should. In merge
+# mode that is right (merge means "enforce what git ignores"). In isolated mode it is a bug:
+# the opt-out promises .claudeignore alone.
+sect "claudeignore-guard: global core.excludesFile"
+GG=$(mktemp -d); mkdir -p "$GG/git"; printf 'global-only.txt\n' > "$GG/git/ignore"
+GP=$(mktemp -d); printf '/mine.txt\n' > "$GP/.claudeignore"
+touch "$GP/mine.txt" "$GP/global-only.txt"
+gprobe() { # $1=extra-env $2=relpath -> deny|allow
+  local o; o=$(printf '{"session_id":"g","tool_input":{"file_path":"%s"}}' "$GP/$2" \
+    | env -u CLAUDEIGNORE_NO_GITIGNORE -u CLAUDEIGNORE_DISABLED $1 \
+        XDG_CONFIG_HOME="$GG" CLAUDE_PROJECT_DIR="$GP" bash "$HOOK" 2>/dev/null)
+  [ -z "$o" ] && echo allow || echo "$o" | jq -r '.hookSpecificOutput.permissionDecision'
+}
+[ "$(gprobe '' mine.txt)" = deny ] && ok "global: .claudeignore still applies in merge mode" \
+  || no "merge mode lost the .claudeignore rule"
+[ "$(gprobe '' global-only.txt)" = deny ] \
+  && ok "global: merge mode honours core.excludesFile (git semantics)" \
+  || no "merge mode should honour the global ignore"
+[ "$(gprobe CLAUDEIGNORE_NO_GITIGNORE=1 mine.txt)" = deny ] \
+  && ok "global: isolated mode still applies .claudeignore" || no "isolated lost .claudeignore"
+[ "$(gprobe CLAUDEIGNORE_NO_GITIGNORE=1 global-only.txt)" = allow ] \
+  && ok "global: isolated mode ignores core.excludesFile — the opt-out means what it says" \
+  || no "isolated mode leaked the global ignore; CLAUDEIGNORE_NO_GITIGNORE promises .claudeignore alone"
+rm -rf "$GG" "$GP"
+
 # --- mode switch must invalidate the mirror ------------------------------------------
 # Regression: found in live use, not by this suite. The helpers above pass NO session_id,
 # so _ci_ensure always took the full-rescan branch and rebuilt the mirror under whichever
