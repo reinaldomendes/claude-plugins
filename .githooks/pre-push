@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# pre-push — reject-gate: refuse to push if a plugin's content changed since the
+# remote but its version wasn't bumped. It never edits or commits; it only rejects
+# and tells you the exact `bin/bump.sh` command to run.
+#
+# Rationale: this catalog floats, so the plugin.json `version` is what triggers
+# consumers to re-fetch. Shipping a plugin change without a version bump means nobody
+# gets it — the bug this gate exists to prevent.
+#
+# Wire it once per clone:  git config core.hooksPath .githooks
+# Bypass (rarely):         git push --no-verify
+
+set -uo pipefail
+
+REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+DEFAULT_BRANCH="${BUMP_GATE_BRANCH:-master}"
+ZERO="0000000000000000000000000000000000000000"
+
+# strictly-greater semver compare: version_gt A B  → true if A > B
+version_gt() {
+  [ "$1" = "$2" ] && return 1
+  [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n1)" = "$1" ]
+}
+
+# version of a plugin manifest at a git object (empty if absent); $1=sha $2=plugin
+version_at() {
+  git show "$1:plugins/$2/.claude-plugin/plugin.json" 2>/dev/null | jq -r '.version // empty' 2>/dev/null
+}
+
+violations=()
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -z "${local_ref:-}" ] && continue
+  # only gate the release branch; feature-branch pushes pass through
+  [ "$local_ref" = "refs/heads/$DEFAULT_BRANCH" ] || continue
+  # deleting a branch (local_sha all zeros) → nothing to gate
+  [ "$local_sha" = "$ZERO" ] && continue
+  # first push of this branch to the remote → no baseline to compare against → pass
+  if [ "$remote_sha" = "$ZERO" ]; then
+    echo "pre-push: no remote baseline for $DEFAULT_BRANCH — skipping bump gate (first push)." >&2
+    continue
+  fi
+
+  range="$remote_sha..$local_sha"
+  # plugins with content changes in the pushed range, excluding pure-docs edits
+  plugins=$(git diff --name-only "$range" -- plugins/ \
+            | grep -vE '^plugins/[^/]+/docs/' \
+            | sed -E 's#^plugins/([^/]+)/.*#\1#' | sort -u)
+
+  for p in $plugins; do
+    remote_v=$(version_at "$remote_sha" "$p")
+    local_v=$(version_at "$local_sha" "$p")
+    # brand-new plugin (absent on remote) → any version is fine
+    [ -z "$remote_v" ] && continue
+    # changed but version not increased → violation
+    if ! version_gt "${local_v:-0.0.0}" "$remote_v"; then
+      violations+=("$p (still $remote_v — run: bin/bump.sh $p [patch|minor|major] --commit)")
+    fi
+  done
+done
+
+if [ "${#violations[@]}" -gt 0 ]; then
+  {
+    echo ""
+    echo "✖ push rejected — changed plugin(s) without a version bump:"
+    for v in "${violations[@]}"; do echo "    • $v"; done
+    echo ""
+    echo "  This catalog floats: consumers only re-fetch a plugin when its version increases."
+    echo "  Bump the plugin(s) above, commit, and push again — or 'git push --no-verify' to override."
+    echo ""
+  } >&2
+  exit 1
+fi
+
+exit 0
