@@ -98,10 +98,17 @@ boundary; blocking it there only produces confusing refusals when you legitimate
 look at a build output. The deny list is for the handful of paths that must never be read
 whatever else fails: credentials, keys, customer data.
 
-That is also why this plugin does not generate the list for you. Two or three lines you
-write deliberately beat a generated block you did not read — and gitignore negations
-(`!.env.example`, `!dist/client/`) have no equivalent in deny rules, so anything generated
-would either drop them or over-block the paths they re-include.
+That is also why this plugin does not generate the list for you: two or three lines you write
+deliberately beat a generated block you did not read.
+
+A translator would also hit an unanswered question. Deny rules use gitignore **pattern**
+syntax — anchoring, `**`, bare filenames matching at any depth — but the docs say nothing
+about the `!` **negation** mechanic, and a re-include is conceptually an `allow` rule, which
+raises its own precedence question. So the fate of a `.claudeignore` containing
+`!.env.example` or `!dist/client/` is undocumented: it might parse, be ignored, or need
+restating as an `allow` entry that may or may not outrank the deny. Until that is measured,
+any generator would be guessing — and a deny list that looks complete while quietly dropping
+your re-includes is the same class of silent failure this plugin exists to remove.
 
 **Deny rules reach further than this plugin does**, and they use gitignore pattern syntax, so
 `Read(.env)` matches at any depth exactly as the same line would in an ignore file.

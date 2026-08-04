@@ -37,6 +37,23 @@ direction — do not quote it as settled, in either direction.
 
 ---
 
+## 1b. Deny-rule negation is undocumented — and I asserted both answers
+
+Read/Edit rules are documented as using gitignore **pattern** syntax. The docs say nothing
+about the `!` **negation** mechanic; searching the permissions page for it returns nothing.
+
+Worth recording because this repo's own docs stated it both ways within a few commits: first
+"gitignore negations have no equivalent in deny rules" (asserted, unevidenced), then "they do —
+deny rules use gitignore syntax" (conflating *pattern* syntax with the negation mechanic, also
+unevidenced). Both were confident; neither was measured.
+
+**The open question**, if anyone needs it: does `"deny": ["Read(.env*)"]` with
+`"allow": ["Read(.env.example)"]` let the example file through, or does deny win? That
+precedence — not `!` parsing — is what decides whether a `.claudeignore` with re-includes can
+be expressed as permission rules at all. Test with a canary, per gotcha 2.
+
+---
+
 ## 2. A results table cannot tell "the model declined" from "the platform blocked it"
 
 The first attempt at gotcha 1 produced a table reading *Denied, Denied, Allowed, Denied* —
