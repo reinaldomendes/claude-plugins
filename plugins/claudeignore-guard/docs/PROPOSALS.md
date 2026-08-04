@@ -18,7 +18,7 @@ what it claims to cover, or a way to make the honest caveat actionable.
 | ~~3~~ | ~~Generate `permissions.deny` from `.claudeignore`~~ | **declined 0.5.5** | The problem was framed wrongly: the right deny list is 2-3 paths, not a translation of every ignore rule. Replaced by a README section. |
 | ~~4~~ | ~~Scope caveat above the fold~~ | **done 0.5.4** | Callout directly under the tagline, before anything else. |
 | ~~5~~ | ~~Mirror hygiene and identity~~ | **done 0.5.1-0.5.3** | Hijack closed (per-uid 0700), debuggability closed (README.txt), key strengthened (64-bit SHA-1). Collection declined with reason. |
-| 6 | Spike `Grep` redaction via `PostToolUse` | **reopened 0.5.7** | Declined on the docs, then a hand test on 2.1.220 failed to reproduce the `Bash` coverage they promise. Blocked on a same-session control. |
+| 6 | Spike `Grep` redaction via `PostToolUse` | **open** | Deny rules measurably do NOT cover `Bash` on 2.1.220, so the platform does not close this. The `Grep` *tool* remains untested. |
 | ~~7~~ | ~~Quote expansions used as patterns~~ | **done 0.5.4 — was NOT a nit** | A project path with `[`/`*`/`?` disabled enforcement entirely and silently. 12 cases added. |
 
 ---
@@ -342,11 +342,14 @@ available, and the reversal is the point.
 That reading suggested the leak the spike targeted — grep for a token name, receive the line
 from `.env` — was already closed by a `Read(.env)` deny rule.
 
-**A hand test on Claude Code 2.1.220 did not reproduce it.** With a `Read(.env)` deny rule in
-`.claude/settings.local.json`, `cat .env` printed the canary, `grep -rn <canary> .` returned
-the line from `.env`, and a `python3` one-liner read it too. Only the third is documented as
-uncovered. The test lacked a same-session `Read` control — so it does not yet *disprove* the
-docs, but it is enough to stop treating them as settled.
+**Measurement disproved it.** Claude Code 2.1.220, one session, throwaway directory,
+`Read(.env)` denied in `.claude/settings.local.json`. The `Read` tool was denied by the harness
+— proving the rule was active — and in that same session `cat .env` printed the canary,
+`grep -rn <canary> .` returned the line, and a `python3` one-liner read it. Only the last is
+documented as uncovered.
+
+Both shell cases ran through `Bash`; the `Grep` **tool** was never exercised, so that half of
+the documented claim is still untested.
 
 An earlier run of the same test was **worthless for a subtler reason**: in three of four cases
 the model declined the command on its own judgement, so the harness was never asked. A refusal

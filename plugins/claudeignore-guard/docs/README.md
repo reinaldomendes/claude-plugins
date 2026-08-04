@@ -106,19 +106,32 @@ would either drop them or over-block the paths they re-include.
 **Deny rules reach further than this plugin does**, and they use gitignore pattern syntax, so
 `Read(.env)` matches at any depth exactly as the same line would in an ignore file.
 
-How much further is **not settled**, and this document will not pretend otherwise. The
-[permissions docs](https://code.claude.com/docs/en/permissions) say a `Read` deny rule is
-applied on a *best-effort* basis to tools that read files including `Grep` and `Glob`, and
-covers file commands recognised in `Bash` such as `cat`, `head`, `tail` and `sed`. A hand test
-on **Claude Code 2.1.220** did not reproduce the `Bash` half: under an active `Read(.env)`
-rule, `cat .env` printed the file. That test lacked a same-session `Read` control, so it is
-suggestive rather than conclusive — but it is enough that you should **verify the boundary in
-your own setup before relying on it**, with a throwaway canary rather than a real secret.
+**But measured, they reach less far than documented.** The
+[permissions docs](https://code.claude.com/docs/en/permissions) state that a `Read` deny rule
+covers file commands recognised in `Bash` such as `cat`, `head`, `tail` and `sed`, and is
+applied best-effort to `Grep` and `Glob`. On **Claude Code 2.1.220** that did not hold for
+`Bash`. In one session, in a throwaway directory, with `Read(.env)` denied in
+`.claude/settings.local.json`:
 
-What deny rules certainly do *not* cover: arbitrary subprocesses that open files themselves —
-a Python or Node script, `docker exec`. Confirmed by the same test. For enforcement below that
-level, [enable the sandbox](https://code.claude.com/docs/en/sandboxing), which is the only
-mechanism here that constrains processes rather than tools.
+| attempt | result |
+|---|---|
+| `Read` the file | **denied by the harness** — the rule was demonstrably active |
+| `cat .env` | **permitted**, printed `SECRET=canary-9f2a` |
+| `grep -rn canary-9f2a .` | **permitted**, returned `./.env:1:SECRET=canary-9f2a` |
+| `python3 -c "print(open('.env').read())"` | **permitted** — this one *is* documented as uncovered |
+
+Both middle rows ran through `Bash`. The `Grep` **tool** was not exercised, so the
+`Grep`/`Glob` half of the claim is still untested either way.
+
+**What to take from this.** A deny rule reliably stops the file tools — which is real value,
+since that is where accidental reads happen. Do not assume it stops a shell command. For paths
+where a determined or careless `cat` must also fail,
+[enable the sandbox](https://code.claude.com/docs/en/sandboxing): it constrains processes
+rather than tools, and is the only mechanism here that does.
+
+Verify it yourself before relying on any of it — with a throwaway canary, never a real
+secret. It took three attempts to measure this correctly, and the first two were misleading in
+opposite directions.
 
 This is why the split matters: **the plugin is for hygiene across your whole ignore file;
 deny rules are the boundary for the few paths that must never be read.** Use both, for
