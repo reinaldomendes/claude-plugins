@@ -367,6 +367,37 @@ o=$(printf '{"session_id":"s","tool_input":{"file_path":"%s"}}' "$NR/x.ts" \
             || no "no-rules project should stay silent, got: $o"
 chmod 700 "$RO"; rm -rf "$UB" "$RO" "$NR"
 
+# --- mirror lives in a per-user, 0700 parent -----------------------------------------
+# $TMPDIR is usually world-writable and the mirror path is derived from the project path,
+# so it is guessable. Without a per-uid 0700 parent, another user on a shared host could
+# pre-create it and choose which rules get enforced.
+sect "claudeignore-guard: mirror base is private to the user"
+MB=$(mktemp -d); printf '.env\n' > "$MB/.claudeignore"; touch "$MB/.env"
+MBT=$(mktemp -d)
+o=$(printf '{"session_id":"s","tool_input":{"file_path":"%s"}}' "$MB/.env" \
+  | env -u CLAUDEIGNORE_NO_GITIGNORE -u CLAUDEIGNORE_DISABLED TMPDIR="$MBT" CLAUDE_PROJECT_DIR="$MB" bash "$HOOK" 2>/dev/null)
+[ "$(echo "$o" | jq -r '.hookSpecificOutput.permissionDecision // "none"')" = "deny" ] \
+  && ok "mirror base: enforcement still works under the new layout" || no "enforcement broke"
+base=$(ls -d "$MBT"/claudeignore-guard-* 2>/dev/null | head -1)
+[ -n "$base" ] && ok "mirror base: parent directory is uid-scoped ($(basename "$base"))" \
+               || no "expected a claudeignore-guard-<uid> parent under TMPDIR"
+[ "$(stat -c %a "$base" 2>/dev/null)" = "700" ] && ok "mirror base: mode is 0700" \
+  || no "mirror base mode is $(stat -c %a "$base" 2>/dev/null), want 700"
+[ "$(stat -c %u "$base" 2>/dev/null)" = "$(id -u)" ] && ok "mirror base: owned by the current user" \
+  || no "mirror base is not owned by us"
+# A symlink planted where the base belongs must be refused, not followed.
+MBT2=$(mktemp -d); DECOY=$(mktemp -d)
+ln -s "$DECOY" "$MBT2/claudeignore-guard-$(id -u)"
+o=$(printf '{"session_id":"s","tool_input":{"file_path":"%s"}}' "$MB/.env" \
+  | env -u CLAUDEIGNORE_NO_GITIGNORE -u CLAUDEIGNORE_DISABLED -u CLAUDEIGNORE_STRICT \
+      TMPDIR="$MBT2" CLAUDE_PROJECT_DIR="$MB" bash "$HOOK" 2>/dev/null)
+echo "$o" | jq -r '.hookSpecificOutput.permissionDecisionReason // ""' | grep -qi 'could not' \
+  && ok "mirror base: a planted symlink is refused and reported, not followed" \
+  || no "symlinked mirror base should be refused (got: $(echo "$o" | head -c 60))"
+[ -z "$(ls -A "$DECOY" 2>/dev/null)" ] && ok "mirror base: nothing was written through the symlink" \
+  || no "the guard wrote into the symlink target"
+rm -rf "$MB" "$MBT" "$MBT2" "$DECOY"
+
 # --- mode switch must invalidate the mirror ------------------------------------------
 # Regression: found in live use, not by this suite. The helpers above pass NO session_id,
 # so _ci_ensure always took the full-rescan branch and rebuilt the mirror under whichever

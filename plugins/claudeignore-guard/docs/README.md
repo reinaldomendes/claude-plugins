@@ -114,7 +114,7 @@ that repo's `.gitignore` says, with no way to select which files count. The mirr
 that control:
 
 ```text
-project/                       mirror/            (in $TMPDIR)
+project/                       mirror/   ($TMPDIR/claudeignore-guard-$UID, mode 0700)
   .gitignore          ─┐
   .claudeignore       ─┴──→      .gitignore       concatenated, .claudeignore LAST
                                  .ci-split        how many lines came from .gitignore

@@ -17,7 +17,7 @@ what it claims to cover, or a way to make the honest caveat actionable.
 | ~~2~~ | ~~Unbuildable mirror must not fail open~~ | **done 0.5.0** | `_ci_ensure` now returns a third outcome; warn-and-allow, or deny under `CLAUDEIGNORE_STRICT=1`. |
 | 3 | Generate `permissions.deny` from `.claudeignore` | feature | Turns the Bash/Grep caveat from a warning into a next step. |
 | 4 | Scope caveat above the fold | docs | The reader most likely to over-trust the plugin never reaches §Scope. |
-| 5 | Mirror hygiene and identity | hardening | The mirror is the plugin's only trust boundary and its only opaque artifact. |
+| 5 | Mirror hygiene and identity | **partly done 0.5.1** | Shared-path hijack closed (per-uid 0700 base). Debuggability, collection and the 32-bit key remain. |
 | 6 | Spike `Grep` redaction via `PostToolUse` | spike | "Impossible" may be overstated; worth knowing before docs commit to it. |
 | 7 | Quote expansions used as patterns | nit | A project path containing `[` or `*` misbehaves. |
 
@@ -185,6 +185,16 @@ letter already; placement is what decides whether it is satisfied in effect.
 **Proposal.** `mkdir -m 700`; refuse a mirror whose owner is not the current user; write a
 `.ci-root` file containing the project path; key on a stronger hash. Optionally prune
 mirrors whose `.ci-root` no longer exists on disk.
+
+**Done in 0.5.1 — the fourth bullet only.** Mirrors now live under a per-user parent,
+`$TMPDIR/claudeignore-guard-$EUID`, created `mkdir -m 700`, refused if it is a symlink or
+owned by someone else, and treated as *could-not-build* (item 2) rather than as "nothing to
+enforce" when refused. `$EUID` is a bash builtin, so the hot path gains no fork.
+
+**Still open:** the first three bullets. The mirror is still keyed by a bare `cksum`, so it
+reveals nothing about which project it belongs to (no `.ci-root`), nothing collects orphans,
+and a 32-bit key can in principle collide. None of those produce a wrong verdict on a
+single-user machine; they are hygiene, and they are why item 5 is not closed.
 
 **Why grouped and ranked below the bugs.** None of these produce a wrong verdict today on a
 single-user machine. They matter because the mirror is the plugin's only piece of hidden

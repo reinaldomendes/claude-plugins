@@ -45,6 +45,29 @@ _ci_set_names() {
   else _CI_NAMES=( .claudeignore ); fi
 }
 
+# Per-user parent for every mirror, mode 700.
+#
+# $TMPDIR is usually the world-writable /tmp, and the mirror path is derived from the
+# project path, so it is guessable. Without this, another user on a shared host could
+# pre-create the directory and choose which rules this plugin enforces — the mirror is
+# the guard's only piece of hidden state, so whoever controls it controls the verdicts.
+#
+# Three parts, all needed: the uid in the NAME so users don't collide on one directory,
+# 700 so nobody else can read or write inside it, and an ownership check because a
+# hostile process can still win the race to create the path first. A symlink is refused
+# outright — otherwise the check passes while the contents live somewhere else entirely.
+#
+# $EUID is a bash builtin: no `id -u` fork on a path taken by every single tool call.
+_ci_mirror_base() {
+  local base="${TMPDIR:-/tmp}/claudeignore-guard-${EUID:-0}"
+  mkdir -m 700 -p "$base" 2>/dev/null
+  [ -d "$base" ] || return 1
+  [ -L "$base" ] && return 1     # a symlink planted where our directory should be
+  [ -O "$base" ] || return 1     # exists, but someone else owns it
+  chmod 700 "$base" 2>/dev/null  # tighten a directory created by an older version
+  printf '%s' "$base"
+}
+
 # Path of the mirror tree for a project root.
 #
 # The MODE is part of the identity, not just the project. A mirror built with the
@@ -54,10 +77,10 @@ _ci_set_names() {
 # flag changes no source. Two mirrors also let sessions in different modes run
 # concurrently without rebuilding each other's work on every call.
 _ci_mirror_dir() {
-  local mode=merged
+  local mode=merged base
   _ci_merge_enabled || mode=claudeonly
-  printf '%s/claudeignore-guard/%s-%s' \
-    "${TMPDIR:-/tmp}" "$(printf '%s' "$1" | cksum | cut -d' ' -f1)" "$mode"
+  base=$(_ci_mirror_base) || return 1
+  printf '%s/%s-%s' "$base" "$(printf '%s' "$1" | cksum | cut -d' ' -f1)" "$mode"
 }
 
 # cat a file, guaranteeing it ends in a newline. Without this a source whose last
@@ -228,7 +251,9 @@ _ci_ensure() {
   _ci_set_names
   _ci_has_sources "$root" || return 1
 
-  mirror=$(_ci_mirror_dir "$root")
+  # An unusable base (someone else owns it, or it is a planted symlink) is a
+  # could-not-build, not a no-op — item 2's distinction is what makes this safe to refuse.
+  mirror=$(_ci_mirror_dir "$root") || return 2
   mkdir -p "$mirror" 2>/dev/null || return 2
   [ -w "$mirror" ] || return 2
   [ -d "$mirror/.git" ] || git -C "$mirror" init -q 2>/dev/null || return 2
