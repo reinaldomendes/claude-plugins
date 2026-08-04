@@ -1,6 +1,8 @@
 {
   "name": "reinaldo-open-plugins",
-  "owner": { "name": "Reinaldo Mendes" },
+  "owner": {
+    "name": "Reinaldo Mendes"
+  },
   "metadata": {
     "description": "Open-source Claude Code plugins. Small, self-contained hooks and skills that fix a concrete gap — MIT, no account or org required."
   },
@@ -8,7 +10,7 @@
     {
       "name": "claudeignore-guard",
       "source": "./plugins/claudeignore-guard",
-      "description": "Enforces `.claudeignore`, which Claude Code does not support natively — blocks Read/Edit/Write on matched paths using full gitignore syntax, naming the rule that blocked."
+      "description": "Enforces `.claudeignore` — which Claude Code does not support natively — and merges your `.gitignore` in by default, so a repo that already guards its secrets is protected with no setup. Denials name the exact rule and how to override it."
     }
   ]
 }

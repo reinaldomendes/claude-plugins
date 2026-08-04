@@ -32,8 +32,15 @@ set -uo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/ignore-match.sh"
 
 INPUT=$(cat)
-FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // .tool_input.notebook_path // empty')
-[ -n "$FILE_PATH" ] || exit 0
+
+# ONE jq call, not two. Measured on this machine: jq costs ~19ms per invocation
+# while the git query it feeds costs under 1ms, so a second parse would be the
+# single most expensive thing the hook does. `@sh` makes jq shell-quote the values,
+# so eval is safe for paths containing spaces, quotes or newlines.
+# SESSION_ID scopes the discovery scan — see _ci_ensure in lib/ignore-match.sh.
+eval "$(printf '%s' "$INPUT" | jq -r '@sh "FILE_PATH=\(.tool_input.file_path // .tool_input.notebook_path // "") SESSION_ID=\(.session_id // "")"' 2>/dev/null)"
+[ -n "${FILE_PATH:-}" ] || exit 0
+SESSION_ID="${SESSION_ID:-}"
 
 ROOT="${CLAUDE_PROJECT_DIR:-$PWD}"
 ROOT=$(cd "$ROOT" 2>/dev/null && pwd) || exit 0
@@ -46,14 +53,41 @@ esac
 # Collapse a leading ./ and any /./ so prefix comparisons hold.
 ABS="${ABS//\/.\//\/}"
 
-WHY=$(ci_is_ignored "$ABS" "$ROOT") || exit 0
+WHY=$(ci_is_ignored "$ABS" "$ROOT" "$SESSION_ID") || exit 0
 
 REL="${ABS#$ROOT/}"
-MSG="Blocked by .claudeignore: $REL
-Matched rule → $WHY
+SRC="${WHY%%:*}"                 # which file the winning rule lives in
+PAT="${WHY#*:}"; PAT="${PAT#*:}" # the rule itself
 
-.claudeignore is enforced by the claudeignore-guard plugin. If this file should be
-readable, adjust the rule (a leading '!' re-includes) or set CLAUDEIGNORE_DISABLED=1."
+# The escape depends on WHAT the rule excluded. `dir/*` excludes the contents and
+# leaves the directory itself un-excluded, so a file-level negation works. A bare
+# `dir` excludes the directory, and then NOTHING inside can be re-included until
+# the directory itself is — so the hint must name that directory, not the file.
+case "$PAT" in
+  */\*)              ESC="!/$REL" ;;
+  */)                ESC="!${PAT}" ;;
+  *\**|*\?*|*\[*)    ESC="!/$REL" ;;
+  *) if [ -d "$ROOT/${PAT#/}" ]; then ESC="!${PAT%/}/"; else ESC="!/$REL"; fi ;;
+esac
+
+MSG="Blocked by $SRC: $REL
+Matched rule → $WHY
+"
+case "$SRC" in
+  *.claudeignore)
+    MSG="$MSG
+Adjust the rule in $SRC (a leading '!' re-includes), or set CLAUDEIGNORE_DISABLED=1." ;;
+  *)
+    MSG="$MSG
+This rule comes from $SRC, which claudeignore-guard merges in by default. To allow
+this path, add to .claudeignore:
+
+    $ESC
+
+Re-include the OUTERMOST excluded directory — '!<dir>/**' and '!<dir>/<file>' do
+nothing while a parent directory is excluded. Or set CLAUDEIGNORE_NO_GITIGNORE=1 to
+drop .gitignore entirely, or CLAUDEIGNORE_DISABLED=1 to turn the guard off." ;;
+esac
 
 if [ "${CLAUDEIGNORE_MODE:-deny}" = "warn" ]; then
   jq -n --arg r "$MSG" \
