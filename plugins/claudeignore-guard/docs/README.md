@@ -75,6 +75,13 @@ fails *silently*, a `SessionStart` notice tells you how many rules are being ski
 | `PreToolUse` | `Read\|Edit\|Write\|NotebookEdit` | [`claudeignore-guard.sh`](../hooks/claudeignore-guard.sh) | **Denies** an excluded path, naming the rule |
 | `SessionStart` | — | [`session-notice.sh`](../hooks/session-notice.sh) | Warns when `.gitignore` enforcement is switched **off** |
 
+**`systemMessage` works on `SessionStart`** — verified live, rendered to the user as
+`SessionStart:startup says: …`. Worth stating because the hooks documentation lists
+`SessionStart` as "context only", which reads as though it could not; that restriction
+governs *decision control*, not the universal output fields. The notice emits
+`systemMessage` for the user **and** `additionalContext` so Claude also knows enforcement
+is narrowed and won't assume a file is protected.
+
 ## How it matches: git does it, on a mirror
 
 There is no pattern matching in this plugin. **Git implements gitignore semantics; this
