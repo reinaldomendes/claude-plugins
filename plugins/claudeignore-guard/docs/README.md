@@ -94,6 +94,11 @@ typed by the user]` prefix, Claude attributed the text to the user on the very n
 **Anything you put in `initialUserMessage` will be read as the user speaking unless the
 framing is structural.** Worth knowing for any hook that uses this field, not just this one.
 
+The notice also states that it is **addressed to the user, not an instruction to Claude** —
+Claude is the delivery path, and should not act on it, change any configuration, or let it
+steer the session. Its only bearing on Claude's work is the fact it reports: `.gitignore`
+is not being enforced, so no path should be assumed protected.
+
 (Worth noting the docs' per-event table lists `SessionStart` as "context only", which reads
 as though `systemMessage` could never work. It does — that restriction governs *decision
 control*, not the universal output fields. The real limit is the surface, not the event.)

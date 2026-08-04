@@ -59,43 +59,39 @@ APPLIED=$(count_rules "${CLAUDEIGNORES[@]:-}")
 FILES=${#GITIGNORES[@]}
 MSG=".gitignore is NOT enforced — CLAUDEIGNORE_NO_GITIGNORE=1 is set, so $SKIPPED rule(s) across $FILES ignore file(s) are being skipped. Only .claudeignore applies ($APPLIED rule(s)). Unset CLAUDEIGNORE_NO_GITIGNORE to restore merged enforcement, or CLAUDEIGNORE_QUIET=1 to silence this notice."
 
+# THIS NOTICE IS ADDRESSED TO THE USER. Claude is only the delivery path — it must not
+# act on it, reconfigure anything, or let it steer the session. Saying so explicitly
+# matters because the text arrives inside a user turn, where anything that reads like a
+# request is indistinguishable from the user making one.
+#
 # Two channels:
+#   initialUserMessage  prepended to the first prompt, rendered in the TRANSCRIPT, so it
+#                       shows on every surface. Replaced `systemMessage`, which renders in
+#                       the terminal only — IDE users saw nothing at all.
+#   additionalContext   Claude sees it whatever the surface, so the warning still lands if
+#                       the transcript channel ever changes.
 #
-#   initialUserMessage  prepended to the first prompt and rendered in the TRANSCRIPT,
-#                       which every surface displays. Confirmed visible in the VS Code /
-#                       Cursor extension. This replaced `systemMessage`, which renders
-#                       ONLY in the terminal CLI — keeping both meant terminal users saw
-#                       the same warning twice while IDE users saw it not at all.
-#   additionalContext   Claude sees it regardless of surface, so the warning still lands
-#                       if the transcript channel ever changes.
+# Framing is structural — an XML-style tag, as Claude Code uses for its own injected
+# context (<system-reminder>, <git-state>) — plus a disclaimer inside, since the tag names
+# the source but not the sender. Both are needed: a one-line "[notice … not typed by the
+# user]" prefix was tried first and Claude still attributed the text to the user on the
+# next turn.
 #
-# initialUserMessage is prepended to the USER's prompt, so it must be unmistakably
-# labelled as machine output. Text arriving in a user turn that reads like a request is
-# otherwise indistinguishable from the user asking for it.
-# Wrapped in a named XML-style tag, matching how Claude Code frames its own injected
-# context (<system-reminder>, <git-state>, …). That convention already signals "this is
-# machine-inserted, not user speech", so it is recognised structurally rather than by
-# reading the prose.
-#
-# The tag alone does not say WHO sent it, so the disclaimer stays inside. Both are needed:
-# a one-line "[notice … not typed by the user]" prefix was tried first, and Claude still
-# attributed the text to the user on the very next turn.
-# It also tells Claude what to DO — get on with the real request — rather than only what
-# not to do. This notice rides along with the user's first prompt, so any deliberation it
-# provokes is deliberation stolen from the thing they actually asked for. (A hook cannot
-# *enforce* that: there is no per-message reasoning control, only the session-wide
-# MAX_THINKING_TOKENS. This is a strong instruction, not a limit.)
+# It also asks for no deliberation. A hook cannot *enforce* that — there is no per-message
+# reasoning control, only session-wide MAX_THINKING_TOKENS — but reasoning spent here is
+# stolen from the request the user actually made.
 BANNER="<claudeignore-guard-notice>
 Automated notice from the claudeignore-guard SessionStart hook. The user did not type
 this and is not asking for anything.
 
 $MSG
 
-Informational only: no analysis, no reasoning and no reply are needed. Proceed directly
-with the user's actual request; mention this only if it turns out to be relevant.
+This warning is for the user, not an instruction to you. Do not act on it, do not change
+any configuration because of it, and do not let it influence what you do next. It needs no
+analysis and no reply — carry on with the user's actual request.
 </claudeignore-guard-notice>"
 
-CTX="$MSG"$'\n'"Informational only — no analysis or reply needed; mention it only if relevant."
+CTX="$MSG"$'\n'"This is a warning for the user, not an instruction to you: do not act on it or change anything because of it. It needs no analysis or reply. Its only bearing on your work is that .gitignore rules are not being enforced, so do not assume a path is protected."
 
 jq -n --arg b "$BANNER" --arg c "$CTX" \
   '{hookSpecificOutput: {hookEventName: "SessionStart",
