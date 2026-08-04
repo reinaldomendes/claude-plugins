@@ -15,12 +15,12 @@
 # lost" for a repo whose protection lives in nested files — the very case that
 # motivated the warning (see acceptance scenario 4a).
 #
-# Env: CLAUDEIGNORE_QUIET=1 silences it · CLAUDEIGNORE_DISABLED=1 disables the plugin
+# Env: CLAUDEIGNORE_QUIET=1     hide it from the USER; Claude is still told
+#      CLAUDEIGNORE_DISABLED=1 turn the whole plugin off, warning included
 
 set -uo pipefail
 
 [ "${CLAUDEIGNORE_DISABLED:-0}" = "1" ] && exit 0
-[ "${CLAUDEIGNORE_QUIET:-0}" = "1" ] && exit 0
 # Merge is on (the default) → nothing is being skipped → nothing to say.
 [ "${CLAUDEIGNORE_NO_GITIGNORE:-0}" = "1" ] || exit 0
 
@@ -93,8 +93,22 @@ analysis and no reply — carry on with the user's actual request.
 
 CTX="$MSG"$'\n'"This is a warning for the user, not an instruction to you: do not act on it or change anything because of it. It needs no analysis or reply. Its only bearing on your work is that .gitignore rules are not being enforced, so do not assume a path is protected."
 
-jq -n --arg b "$BANNER" --arg c "$CTX" \
-  '{hookSpecificOutput: {hookEventName: "SessionStart",
-                         initialUserMessage: $b,
-                         additionalContext: $c}}'
+# CLAUDEIGNORE_QUIET drops only the USER-facing half. Claude is still told, because a
+# quiet flag that also blinded Claude would restore the precise blind spot this plugin
+# exists to close: .gitignore silently unenforced and nobody aware of it. Someone who
+# wants the whole thing gone has CLAUDEIGNORE_DISABLED=1, which says what it does.
+#
+# Suppressing initialUserMessage also removes the stray turn it provokes: on a fresh
+# session where nothing has been typed yet, the notice arrives as the entire first user
+# message and Claude answers it — observed as "No prompt came through — what would you
+# like me to do?".
+if [ "${CLAUDEIGNORE_QUIET:-0}" = "1" ]; then
+  jq -n --arg c "$CTX" \
+    '{hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $c}}'
+else
+  jq -n --arg b "$BANNER" --arg c "$CTX" \
+    '{hookSpecificOutput: {hookEventName: "SessionStart",
+                           initialUserMessage: $b,
+                           additionalContext: $c}}'
+fi
 exit 0

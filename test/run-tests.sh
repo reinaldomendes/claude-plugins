@@ -340,7 +340,14 @@ if [ -f "$NOTICE" ]; then
     || no "initialUserMessage framing too weak — it lands in a USER turn and gets read as the user speaking"
   o=$(nrun "$A"); [ -z "$o" ] && ok "notice: silent in merge mode" || no "notice should be silent by default"
   o=$(nrun "$A" CLAUDEIGNORE_NO_GITIGNORE=1 CLAUDEIGNORE_QUIET=1)
-  [ -z "$o" ] && ok "notice: CLAUDEIGNORE_QUIET=1 silences it" || no "QUIET should silence the notice"
+  echo "$o" | jq -e '.hookSpecificOutput|has("initialUserMessage")|not' >/dev/null 2>&1 \
+    && ok "QUIET=1: no initialUserMessage — user sees nothing, no stray turn" \
+    || no "QUIET should drop the user-facing banner"
+  echo "$o" | jq -e '.hookSpecificOutput.additionalContext' >/dev/null 2>&1 \
+    && ok "QUIET=1: Claude is STILL told (a quiet flag must not restore the blind spot)" \
+    || no "QUIET must not hide the warning from Claude — that is what DISABLED is for"
+  o=$(nrun "$A" CLAUDEIGNORE_NO_GITIGNORE=1 CLAUDEIGNORE_DISABLED=1)
+  [ -z "$o" ] && ok "DISABLED=1: total silence, both channels" || no "DISABLED should emit nothing"
   o=$(nrun "$B" CLAUDEIGNORE_NO_GITIGNORE=1)   # .gitignore holds only a negation -> nothing lost
   [ -z "$o" ] && ok "notice: silent when the ignore files hold no real exclusion (no crying wolf)" \
               || no "notice should not fire when nothing would be lost"

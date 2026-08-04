@@ -199,7 +199,7 @@ immediately.
 | `CLAUDEIGNORE_DISABLED` | `0` | `1` = hook off entirely |
 | `CLAUDEIGNORE_NO_GITIGNORE` | `0` | `1` = ignore `.gitignore` and `.git/info/exclude`; honour `.claudeignore` alone |
 | `CLAUDEIGNORE_MODE` | `deny` | `warn` = allow the call but attach the reason. Useful while tuning patterns |
-| `CLAUDEIGNORE_QUIET` | `0` | `1` = silence the `SessionStart` notice |
+| `CLAUDEIGNORE_QUIET` | `0` | `1` = hide the `SessionStart` notice from **you**; Claude is still told. Use `CLAUDEIGNORE_DISABLED=1` to silence it entirely |
 
 ### What the opt-out really costs
 
