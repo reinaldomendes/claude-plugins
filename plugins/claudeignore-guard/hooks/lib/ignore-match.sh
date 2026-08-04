@@ -362,7 +362,12 @@ ci_is_ignored() {
   command -v git >/dev/null 2>&1 || return 1
 
   # Only ever judge paths inside the project.
-  case "$target" in "$root"/*) rel="${target#$root/}" ;; *) return 1 ;; esac
+  # "$root" must be quoted INSIDE the expansion too. `${target#$root/}` treats $root as a
+  # PATTERN, so a project directory named e.g. `weird[1]*dir` strips the wrong prefix (or
+  # nothing), the path stops looking like it is inside the project, and enforcement fails
+  # silently for that whole project. The case pattern is already safe — quoting there makes
+  # it literal — but the parameter expansion was not.
+  case "$target" in "$root"/*) rel="${target#"$root"/}" ;; *) return 1 ;; esac
 
   mirror=$(_ci_ensure "$root" "$session"); rc=$?
   [ "$rc" = 0 ] || return "$rc"

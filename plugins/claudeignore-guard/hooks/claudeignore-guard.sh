@@ -98,7 +98,7 @@ Set CLAUDEIGNORE_STRICT=1 to deny reads instead of allowing them when this happe
   fi
 fi
 
-REL="${ABS#$ROOT/}"
+REL="${ABS#"$ROOT"/}"   # quoted: an unquoted $ROOT is a PATTERN here (see lib/ignore-match.sh)
 SRC="${WHY%%:*}"                 # which file the winning rule lives in
 PAT="${WHY#*:}"; PAT="${PAT#*:}" # the rule itself
 

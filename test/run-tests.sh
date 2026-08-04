@@ -424,6 +424,24 @@ o=$(printf '{"session_id":"s2","tool_input":{"file_path":"%s"}}' "$MB/.env" \
   && ok "mirror README does not affect matching" || no "README broke the verdict"
 rm -rf "$MB" "$MBT" "$MBT2" "$DECOY"
 
+# --- project paths containing glob metacharacters -------------------------------------
+# `${target#$root/}` and `case … in "$root"/*)` put an expansion where bash pattern-matches,
+# so a project directory containing [ * or ? mis-strips the prefix and the path stops being
+# recognised as inside the project. Filed as a "nit"; it is not one — enforcement fails
+# entirely and silently for those projects.
+sect "claudeignore-guard: project paths with glob metacharacters"
+for weird in 'weird[1]*dir' 'a?b' 'x[!y]z'; do
+  GP="$(mktemp -d)/$weird"; mkdir -p "$GP/sub"
+  printf '.env\nsub/\n' > "$GP/.claudeignore"
+  printf 'S=1\n' > "$GP/.env"; touch "$GP/ok.txt" "$GP/sub/hidden"
+  gcase "$GP" .env       deny  "glob path «$weird»: excluded file is denied"
+  gcase "$GP" sub/hidden deny  "glob path «$weird»: excluded directory is denied"
+  gcase "$GP" ok.txt     allow "glob path «$weird»: unmatched file stays readable"
+  gwhy "$GP" .env | grep -q '\.claudeignore:1' \
+    && ok "glob path «$weird»: denial still cites the rule" || no "glob path «$weird»: lost provenance"
+  rm -rf "$(dirname "$GP")"
+done
+
 # --- mode switch must invalidate the mirror ------------------------------------------
 # Regression: found in live use, not by this suite. The helpers above pass NO session_id,
 # so _ci_ensure always took the full-rescan branch and rebuilt the mirror under whichever

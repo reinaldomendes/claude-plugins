@@ -3,6 +3,12 @@
 > Makes `.claudeignore` actually work — and, by default, enforces your `.gitignore` too,
 > so a repo that already guards its secrets is protected with no setup at all.
 
+> [!IMPORTANT]
+> **Covers `Read`, `Edit`, `Write`, `NotebookEdit`. Does NOT cover `Bash` or `Grep`.**
+> `cat .env` still works, and a content-mode grep can still surface a line from an excluded
+> file. This is context hygiene, not a security boundary — `permissions.deny` in
+> `settings.json` is the boundary. See [Scope](#scope--read-this-before-trusting-it).
+
 **Kind:** hooks · **Activates:** automatically while enabled
 **Source:** [`plugins/claudeignore-guard/`](../)
 

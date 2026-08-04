@@ -16,10 +16,10 @@ what it claims to cover, or a way to make the honest caveat actionable.
 | ~~1~~ | ~~Resolve symlinks before matching~~ | **done 0.5.0** | Fixed; 8 cases in the suite, incl. dir links, broken links and out-of-project links. |
 | ~~2~~ | ~~Unbuildable mirror must not fail open~~ | **done 0.5.0** | `_ci_ensure` now returns a third outcome; warn-and-allow, or deny under `CLAUDEIGNORE_STRICT=1`. |
 | 3 | Generate `permissions.deny` from `.claudeignore` | feature | Turns the Bash/Grep caveat from a warning into a next step. |
-| 4 | Scope caveat above the fold | docs | The reader most likely to over-trust the plugin never reaches §Scope. |
+| ~~4~~ | ~~Scope caveat above the fold~~ | **done 0.5.4** | Callout directly under the tagline, before anything else. |
 | ~~5~~ | ~~Mirror hygiene and identity~~ | **done 0.5.1-0.5.3** | Hijack closed (per-uid 0700), debuggability closed (README.txt), key strengthened (64-bit SHA-1). Collection declined with reason. |
 | 6 | Spike `Grep` redaction via `PostToolUse` | spike | "Impossible" may be overstated; worth knowing before docs commit to it. |
-| 7 | Quote expansions used as patterns | nit | A project path containing `[` or `*` misbehaves. |
+| ~~7~~ | ~~Quote expansions used as patterns~~ | **done 0.5.4 — was NOT a nit** | A project path with `[`/`*`/`?` disabled enforcement entirely and silently. 12 cases added. |
 
 ---
 
@@ -249,9 +249,17 @@ documented dead end.
 where bash performs pattern matching, so a project path containing `[`, `*` or `?`
 mis-strips the prefix or mis-scopes the check.
 
-**Why it's last.** Rare in practice and cosmetic in effect — but it sits in the two lines
-that decide *is this path in the project* and *what do we call it*, which is a poor place
-for an edge case to hide.
+**Why it was last — and why that was wrong.** Ranked a nit on the assumption the effect was
+cosmetic. Reproduced before fixing: in a project directory named `weird[1]*dir`, `.env` was
+**allowed** despite a `.claudeignore` naming it. `${target#$root/}` treats `$root` as a
+pattern, the prefix strips wrong, the path stops looking like it is inside the project and
+enforcement vanishes — silently, for that entire project. Fixed by quoting inside the
+expansion (`${target#"$root"/}`); the `case` pattern was already safe. Tested against `[`,
+`?` and `[!…]` paths, asserting denial, directory rules, allowed files and provenance.
+
+The lesson generalises: "sits in the line that decides whether the path is in the project"
+was in the original write-up as a reason to be uneasy, and that instinct outranked the
+severity label attached to it.
 
 ---
 
