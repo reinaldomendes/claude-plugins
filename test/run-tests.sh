@@ -12,6 +12,22 @@ REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 RESULTS="${HOME}/reinaldo-open-plugins-test-results.txt"
 : > "$RESULTS"
 
+# Give the whole run its own TMPDIR, removed on exit.
+#
+# Two reasons, both learned the hard way. Every case builds a throwaway project with
+# `mktemp -d`, and claudeignore-guard mirrors each one under $TMPDIR keyed by the project
+# PATH — so a unique path per case means a fresh mirror per case. The case then deletes
+# its project and the mirror stays: one run left 16 behind, and 15 runs during development
+# accumulated ~240 directories (29MB) in the developer's shared /tmp.
+#
+# Worse than the litter: sharing $TMPDIR with live Claude Code sessions means the suite
+# and the user's real mirrors sit in the same namespace. A test has no business anywhere
+# near those. Isolating the run fixes both, and costs one line.
+TEST_TMP=$(mktemp -d -t claudeignore-tests.XXXXXX) || exit 1
+export TMPDIR="$TEST_TMP"
+cleanup_tmp() { [ -n "${TEST_TMP:-}" ] && rm -rf "$TEST_TMP"; }
+trap cleanup_tmp EXIT INT TERM
+
 pass=0; fail=0; skip=0
 log()  { echo "$*" | tee -a "$RESULTS"; }
 ok()   { pass=$((pass+1)); log "  PASS  $*"; }
