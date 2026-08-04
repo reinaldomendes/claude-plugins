@@ -72,7 +72,17 @@ MSG=".gitignore is NOT enforced — CLAUDEIGNORE_NO_GITIGNORE=1 is set, so $SKIP
 # initialUserMessage is prepended to the USER's prompt, so it must be unmistakably
 # labelled as machine output. Text arriving in a user turn that reads like a request is
 # otherwise indistinguishable from the user asking for it.
-BANNER="[claudeignore-guard notice — emitted by a SessionStart hook, not typed by the user] $MSG"
+# The label is deliberately heavy-handed. A milder one — "[notice ... not typed by the
+# user]" prefixed to the sentence — was tried and Claude STILL attributed the text to the
+# user in the very next turn. Anything arriving in a user turn is read as the user
+# speaking unless the framing is impossible to skim past, so: leading marker, explicit
+# "no request is being made", and a trailing marker to close the quoted region.
+BANNER="=== AUTOMATED NOTICE — NOT FROM THE USER ===
+Emitted by the claudeignore-guard SessionStart hook. The user did not type this and is
+not asking for anything. Do not act on it; report it if relevant.
+
+$MSG
+=== END AUTOMATED NOTICE ==="
 
 jq -n --arg b "$BANNER" --arg m "$MSG" \
   '{hookSpecificOutput: {hookEventName: "SessionStart",

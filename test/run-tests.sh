@@ -330,9 +330,11 @@ if [ -f "$NOTICE" ]; then
     && ok "notice: emits additionalContext (Claude always sees it)" || no "notice lacks additionalContext"
   # initialUserMessage lands inside a USER turn, so it must announce itself as machine
   # output — otherwise a warning is indistinguishable from something the user asked for.
-  echo "$o" | jq -r '.hookSpecificOutput.initialUserMessage' | grep -q 'not typed by the user' \
-    && ok "notice: initialUserMessage is labelled as hook output, not a user request" \
-    || no "initialUserMessage must be labelled as machine-emitted"
+  b=$(echo "$o" | jq -r '.hookSpecificOutput.initialUserMessage')
+  { echo "$b" | grep -q 'NOT FROM THE USER' && echo "$b" | grep -q 'not asking for anything' \
+    && echo "$b" | grep -q 'END AUTOMATED NOTICE'; } \
+    && ok "notice: initialUserMessage is unmistakably framed as machine output" \
+    || no "initialUserMessage framing too weak — it lands in a USER turn and gets read as the user speaking"
   o=$(nrun "$A"); [ -z "$o" ] && ok "notice: silent in merge mode" || no "notice should be silent by default"
   o=$(nrun "$A" CLAUDEIGNORE_NO_GITIGNORE=1 CLAUDEIGNORE_QUIET=1)
   [ -z "$o" ] && ok "notice: CLAUDEIGNORE_QUIET=1 silences it" || no "QUIET should silence the notice"
