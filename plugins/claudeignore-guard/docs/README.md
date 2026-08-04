@@ -68,8 +68,9 @@ fails *silently*, a `SessionStart` notice tells you how many rules are being ski
   `PreToolUse` there is nothing to match a rule against without re-implementing their
   traversal.
 
-**`permissions.deny` covers both of these**, which is the recommended answer rather than a
-consolation prize — see below. The gap is in *this hook*, not in Claude Code.
+**`permissions.deny` is the recommended answer for both** — the gap is in *this hook*, not
+necessarily in Claude Code. How completely deny rules cover `Bash` and `Grep` is documented
+but, in one hand test, not reproduced; see below before relying on it.
 
 **So this is context hygiene, not a security boundary.** For a hard boundary use
 `permissions.deny`, which the harness enforces rather than a hook.
@@ -102,16 +103,22 @@ write deliberately beat a generated block you did not read — and gitignore neg
 (`!.env.example`, `!dist/client/`) have no equivalent in deny rules, so anything generated
 would either drop them or over-block the paths they re-include.
 
-**Deny rules reach further than this plugin does — that is the point of using them.** Per the
-[permissions docs](https://code.claude.com/docs/en/permissions), a `Read` deny rule applies to
-Claude's built-in file tools, is applied on a *best-effort* basis to tools that read files
-including **`Grep` and `Glob`**, and covers **file commands Claude Code recognises in `Bash`,
-such as `cat`, `head`, `tail` and `sed`**. It also uses gitignore pattern syntax, so
+**Deny rules reach further than this plugin does**, and they use gitignore pattern syntax, so
 `Read(.env)` matches at any depth exactly as the same line would in an ignore file.
 
-What deny rules still do *not* cover: arbitrary subprocesses that open files themselves — a
-Python or Node script, a `docker exec`, a tool the shell parser doesn't recognise. For
-enforcement below that level, [enable the sandbox](https://code.claude.com/docs/en/sandboxing).
+How much further is **not settled**, and this document will not pretend otherwise. The
+[permissions docs](https://code.claude.com/docs/en/permissions) say a `Read` deny rule is
+applied on a *best-effort* basis to tools that read files including `Grep` and `Glob`, and
+covers file commands recognised in `Bash` such as `cat`, `head`, `tail` and `sed`. A hand test
+on **Claude Code 2.1.220** did not reproduce the `Bash` half: under an active `Read(.env)`
+rule, `cat .env` printed the file. That test lacked a same-session `Read` control, so it is
+suggestive rather than conclusive — but it is enough that you should **verify the boundary in
+your own setup before relying on it**, with a throwaway canary rather than a real secret.
+
+What deny rules certainly do *not* cover: arbitrary subprocesses that open files themselves —
+a Python or Node script, `docker exec`. Confirmed by the same test. For enforcement below that
+level, [enable the sandbox](https://code.claude.com/docs/en/sandboxing), which is the only
+mechanism here that constrains processes rather than tools.
 
 This is why the split matters: **the plugin is for hygiene across your whole ignore file;
 deny rules are the boundary for the few paths that must never be read.** Use both, for

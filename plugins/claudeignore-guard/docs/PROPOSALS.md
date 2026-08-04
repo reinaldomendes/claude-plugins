@@ -18,7 +18,7 @@ what it claims to cover, or a way to make the honest caveat actionable.
 | ~~3~~ | ~~Generate `permissions.deny` from `.claudeignore`~~ | **declined 0.5.5** | The problem was framed wrongly: the right deny list is 2-3 paths, not a translation of every ignore rule. Replaced by a README section. |
 | ~~4~~ | ~~Scope caveat above the fold~~ | **done 0.5.4** | Callout directly under the tagline, before anything else. |
 | ~~5~~ | ~~Mirror hygiene and identity~~ | **done 0.5.1-0.5.3** | Hijack closed (per-uid 0700), debuggability closed (README.txt), key strengthened (64-bit SHA-1). Collection declined with reason. |
-| ~~6~~ | ~~Spike `Grep` redaction via `PostToolUse`~~ | **declined 0.5.6** | Moot: a `Read` deny rule already covers `Grep`, `Glob` and recognised `Bash` file commands. The platform solves it. |
+| 6 | Spike `Grep` redaction via `PostToolUse` | **reopened 0.5.7** | Declined on the docs, then a hand test on 2.1.220 failed to reproduce the `Bash` coverage they promise. Blocked on a same-session control. |
 | ~~7~~ | ~~Quote expansions used as patterns~~ | **done 0.5.4 — was NOT a nit** | A project path with `[`/`*`/`?` disabled enforcement entirely and silently. 12 cases added. |
 
 ---
@@ -328,9 +328,9 @@ per-call cost is measured, so the number isn't read as a regression.
 
 ## 6. Spike: `Grep` redaction via `PostToolUse` — DECLINED
 
-**Declined in 0.5.6, before spending the hour**, because the question the spike existed to
-answer turned out to be answered in the permissions documentation. Reading it first was worth
-more than running the experiment.
+**Declined in 0.5.6 on the documentation — then reopened in 0.5.7 when measurement disagreed
+with it.** Recorded in that order deliberately: the decline was reasonable on the evidence
+available, and the reversal is the point.
 
 > "Claude makes a best-effort attempt to apply `Read` rules to all built-in tools that read
 > files like Grep and Glob"
@@ -339,11 +339,20 @@ more than running the experiment.
 > Code recognizes in Bash, such as `cat`, `head`, `tail`, and `sed`."
 > — [Configure permissions](https://code.claude.com/docs/en/permissions)
 
-So the leak the spike targeted — grep for a token name, receive the line from `.env` — is
-already closed by a `Read(.env)` deny rule, which also happens to use gitignore syntax. There
-is no reason to build a redaction hook that partially reimplements a boundary the harness
-already enforces properly, and every reason not to: partial coverage in one grep mode would be
-worse than none.
+That reading suggested the leak the spike targeted — grep for a token name, receive the line
+from `.env` — was already closed by a `Read(.env)` deny rule.
+
+**A hand test on Claude Code 2.1.220 did not reproduce it.** With a `Read(.env)` deny rule in
+`.claude/settings.local.json`, `cat .env` printed the canary, `grep -rn <canary> .` returned
+the line from `.env`, and a `python3` one-liner read it too. Only the third is documented as
+uncovered. The test lacked a same-session `Read` control — so it does not yet *disprove* the
+docs, but it is enough to stop treating them as settled.
+
+An earlier run of the same test was **worthless for a subtler reason**: in three of four cases
+the model declined the command on its own judgement, so the harness was never asked. A refusal
+by the assistant looks identical in a results table to a refusal by the platform, and only the
+"why" column revealed the difference. Any future run of this must instruct the session to
+attempt the command and report what the harness did.
 
 **What this changes elsewhere in this document.** Two earlier claims were wrong and are
 corrected in the README:
