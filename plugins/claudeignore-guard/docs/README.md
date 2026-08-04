@@ -257,9 +257,20 @@ dist/*           # excludes dist's CONTENTS, dist itself is not excluded …
 !dist/client/    # … so this works. dist/client/a.js is readable.
 ```
 
-And the rule is **re-include the outermost excluded directory, then narrow** — not merely
-"re-include the directory". With `/inert` excluded, `!inert/foo` does nothing, because
-`inert` above it is still excluded. This works:
+**Which form you need depends on what the rule excluded**, and getting it backwards is the
+usual reason a `!` line appears to do nothing:
+
+| the rule that blocked you | what it excluded | write |
+|---|---|---|
+| `dir` or `/dir` | the **directory** | `!dir/` — re-include the directory |
+| `dir/*` | the **contents** | `!dir/file` — re-include the file |
+
+`.vscode/*` is the second kind, so `!.vscode/` does nothing at all: it re-includes a directory
+that was never excluded. `!.vscode/launch.json` is the line that works. The denial message
+picks the right form for you — it reads the winning rule's shape, so paste what it suggests.
+
+And where the directory *is* excluded, go to the **outermost** one, then narrow. With `/inert`
+excluded, `!inert/foo` does nothing, because `inert` above it is still excluded. This works:
 
 ```gitignore
 # .gitignore:      /inert

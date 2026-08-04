@@ -88,6 +88,28 @@ whether such a guard is tolerable or infuriating.
 
 ---
 
+## 3b. "Re-include the directory" is only half the rule
+
+Stated in this repo's docs for several versions as *"re-include the outermost excluded
+directory"*. That is right only when a rule excluded the **directory**. When it excluded the
+**contents**, the directory was never excluded and re-including it does nothing:
+
+| blocking rule | excluded | working negation |
+|---|---|---|
+| `dir`, `/dir` | the directory | `!dir/` |
+| `dir/*` | the contents | `!dir/file` |
+
+Found on a real `.gitignore` carrying `.vscode/*`: `!.vscode/` left `launch.json` denied,
+`!.vscode/launch.json` freed it, and `.vscode/tasks.json` stayed denied — surgical, as it
+should be.
+
+The **hook was already correct** — its escape hint branches on the winning rule's shape and
+produced a working line in all three cases (`/dir`, `dir/*`, bare filename), verified. Only the
+prose was wrong. Worth recording because the code being right is exactly why nobody noticed the
+documentation was not.
+
+---
+
 ## 4. `git check-ignore -v` exits 0 for a negation
 
 `-q` means "this path is excluded". `-v` means "some rule matched", **including a `!` rule**.
