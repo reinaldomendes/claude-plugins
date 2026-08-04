@@ -76,11 +76,29 @@ _ci_mirror_base() {
 # freshness pass only rebuilds directories whose SOURCES changed — and flipping a
 # flag changes no source. Two mirrors also let sessions in different modes run
 # concurrently without rebuilding each other's work on every call.
+# 64 bits of SHA-1, not a 32-bit checksum. A collision means one project's ignore rules
+# are enforced against another — silently, which is the class of failure this plugin
+# exists to remove. `cksum` was chosen for speed, but that was a bad reason: measured,
+# cksum and sha1sum both cost ~2.2ms because the expense is the fork, not the hashing
+# (20 bytes of input). Same cost, ~4 billion times the collision resistance.
+#
+# `shasum -a 1` is the macOS fallback; `cksum` remains a last resort so the plugin still
+# functions on a system with neither, just with the weaker key.
+_ci_hash() {
+  if command -v sha1sum >/dev/null 2>&1; then
+    printf '%s' "$1" | sha1sum | cut -c1-16
+  elif command -v shasum >/dev/null 2>&1; then
+    printf '%s' "$1" | shasum -a 1 | cut -c1-16
+  else
+    printf '%s' "$1" | cksum | cut -d' ' -f1
+  fi
+}
+
 _ci_mirror_dir() {
   local mode=merged base
   _ci_merge_enabled || mode=claudeonly
   base=$(_ci_mirror_base) || return 1
-  printf '%s/%s-%s' "$base" "$(printf '%s' "$1" | cksum | cut -d' ' -f1)" "$mode"
+  printf '%s/%s-%s' "$base" "$(_ci_hash "$1")" "$mode"
 }
 
 # cat a file, guaranteeing it ends in a newline. Without this a source whose last

@@ -17,7 +17,7 @@ what it claims to cover, or a way to make the honest caveat actionable.
 | ~~2~~ | ~~Unbuildable mirror must not fail open~~ | **done 0.5.0** | `_ci_ensure` now returns a third outcome; warn-and-allow, or deny under `CLAUDEIGNORE_STRICT=1`. |
 | 3 | Generate `permissions.deny` from `.claudeignore` | feature | Turns the Bash/Grep caveat from a warning into a next step. |
 | 4 | Scope caveat above the fold | docs | The reader most likely to over-trust the plugin never reaches §Scope. |
-| 5 | Mirror hygiene and identity | **partly done 0.5.1 / 0.5.2** | Shared-path hijack closed (per-uid 0700 base); debuggability closed (README.txt naming the project). Collection declined; 32-bit key remains. |
+| ~~5~~ | ~~Mirror hygiene and identity~~ | **done 0.5.1-0.5.3** | Hijack closed (per-uid 0700), debuggability closed (README.txt), key strengthened (64-bit SHA-1). Collection declined with reason. |
 | 6 | Spike `Grep` redaction via `PostToolUse` | spike | "Impossible" may be overstated; worth knowing before docs commit to it. |
 | 7 | Quote expansions used as patterns | nit | A project path containing `[` or `*` misbehaves. |
 
@@ -200,11 +200,13 @@ question and not the first.
 **Collection: declined.** ~134K per project, two per project, `/tmp` clears on reboot.
 Code to prune it would cost more than it saves.
 
-**Still open:** the weak key. The mirror is still keyed by a bare `cksum`, so it
+**Done in 0.5.3 — the key.** 64 bits of SHA-1 replaces the 32-bit `cksum`, with `shasum -a 1`
+as the macOS fallback and `cksum` as a last resort. Measured first: both cost ~2.2ms,
+because the expense is the fork, not the hashing of a 20-byte path. The original "too
+expensive" justification was simply untrue. The mirror is still keyed by a bare `cksum`, so it
 reveals nothing about which project it belongs to (no `.ci-root`), nothing collects orphans,
 and a 32-bit key can in principle collide. None of those produce a wrong verdict on a
-single-user machine; the 32-bit key is the only one left, and it is worth noting the fix is
-free — a `cksum` fork and a `sha1sum` fork cost the same, so the objection was never cost.
+single-user machine. All are now closed or explicitly declined.
 
 **Why grouped and ranked below the bugs.** None of these produce a wrong verdict today on a
 single-user machine. They matter because the mirror is the plugin's only piece of hidden

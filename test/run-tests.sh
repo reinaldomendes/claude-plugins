@@ -399,6 +399,19 @@ echo "$o" | jq -r '.hookSpecificOutput.permissionDecisionReason // ""' | grep -q
 # A mirror must say what it is and whose it is — otherwise it is an opaque scratch tree
 # with a .git inside, and the only troubleshooting advice possible is "delete it".
 mdir=$(ls -d "$base"/*-merged 2>/dev/null | head -1)
+# 64-bit hex key, not a 32-bit decimal checksum: a collision would enforce one project's
+# rules against another, silently.
+[[ "$(basename "$mdir")" =~ ^[0-9a-f]{16}-merged$ ]] \
+  && ok "mirror key: 16 hex chars (64 bits of SHA-1)" \
+  || no "mirror key looks weak: $(basename "$mdir")"
+# Same project must map to the same mirror every time, or the cache never hits.
+k1=$(basename "$mdir")
+printf '{"session_id":"s3","tool_input":{"file_path":"%s"}}' "$MB/.env" \
+  | env -u CLAUDEIGNORE_NO_GITIGNORE -u CLAUDEIGNORE_DISABLED TMPDIR="$MBT" CLAUDE_PROJECT_DIR="$MB" bash "$HOOK" >/dev/null 2>&1
+k2=$(basename "$(ls -d "$base"/*-merged | head -1)")
+{ [ "$k1" = "$k2" ] && [ "$(ls -d "$base"/*-merged | wc -l)" = 1 ]; } \
+  && ok "mirror key: stable across calls (one mirror per project+mode)" \
+  || no "key is not deterministic — got '$k1' then '$k2'"
 [ -f "$mdir/README.txt" ] && ok "mirror: carries a README.txt" || no "mirror has no README.txt"
 grep -q "^project : $MB\$" "$mdir/README.txt" 2>/dev/null \
   && ok "mirror README names the project it belongs to" || no "README should name the project path"
