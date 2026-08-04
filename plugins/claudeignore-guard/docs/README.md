@@ -75,12 +75,22 @@ fails *silently*, a `SessionStart` notice tells you how many rules are being ski
 | `PreToolUse` | `Read\|Edit\|Write\|NotebookEdit` | [`claudeignore-guard.sh`](../hooks/claudeignore-guard.sh) | **Denies** an excluded path, naming the rule |
 | `SessionStart` | — | [`session-notice.sh`](../hooks/session-notice.sh) | Warns when `.gitignore` enforcement is switched **off** |
 
-**`systemMessage` works on `SessionStart`** — verified live, rendered to the user as
-`SessionStart:startup says: …`. Worth stating because the hooks documentation lists
-`SessionStart` as "context only", which reads as though it could not; that restriction
-governs *decision control*, not the universal output fields. The notice emits
-`systemMessage` for the user **and** `additionalContext` so Claude also knows enforcement
-is narrowed and won't assume a file is protected.
+**Where the notice actually shows up — it depends on the surface.** Verified by observation
+on both:
+
+| surface | `systemMessage` (user sees it) | `additionalContext` (Claude sees it) |
+|---------|-------------------------------|--------------------------------------|
+| terminal CLI | **yes** — `SessionStart:startup says: …` | yes |
+| VS Code / Cursor extension | **no — nothing is displayed** | yes |
+
+So in the IDE extension the warning reaches **Claude only**. You get no visible signal that
+`.gitignore` enforcement is off; Claude knows, and will say so if it matters, but nothing
+appears on screen. Treat the notice as a terminal-only affordance and don't rely on its
+absence to mean the merge is on — check `CLAUDEIGNORE_NO_GITIGNORE` directly if it matters.
+
+(Worth noting the docs' per-event table lists `SessionStart` as "context only", which reads
+as though `systemMessage` could never work. It does — that restriction governs *decision
+control*, not the universal output fields. The real limit is the surface, not the event.)
 
 ## How it matches: git does it, on a mirror
 

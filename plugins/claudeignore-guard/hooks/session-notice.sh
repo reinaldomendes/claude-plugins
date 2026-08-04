@@ -59,8 +59,10 @@ APPLIED=$(count_rules "${CLAUDEIGNORES[@]:-}")
 FILES=${#GITIGNORES[@]}
 MSG=".gitignore is NOT enforced — CLAUDEIGNORE_NO_GITIGNORE=1 is set, so $SKIPPED rule(s) across $FILES ignore file(s) are being skipped. Only .claudeignore applies ($APPLIED rule(s)). Unset CLAUDEIGNORE_NO_GITIGNORE to restore merged enforcement, or CLAUDEIGNORE_QUIET=1 to silence this notice."
 
-# systemMessage is the user-facing channel; additionalContext tells Claude, so it
-# does not assume a file is protected when it is not.
+# systemMessage is the user-facing channel -- but ONLY in the terminal CLI. In the
+# VS Code / Cursor extension it is not displayed at all (observed on both surfaces),
+# so additionalContext is what actually guarantees the warning lands somewhere: Claude
+# is told even when the user sees nothing, and can say so when it matters.
 jq -n --arg m "$MSG" \
   '{systemMessage: $m,
     hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $m}}'
