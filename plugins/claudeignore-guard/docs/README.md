@@ -75,18 +75,18 @@ fails *silently*, a `SessionStart` notice tells you how many rules are being ski
 | `PreToolUse` | `Read\|Edit\|Write\|NotebookEdit` | [`claudeignore-guard.sh`](../hooks/claudeignore-guard.sh) | **Denies** an excluded path, naming the rule |
 | `SessionStart` | — | [`session-notice.sh`](../hooks/session-notice.sh) | Warns when `.gitignore` enforcement is switched **off** |
 
-**Where the notice actually shows up — it depends on the surface.** Verified by observation
-on both:
+**How the notice reaches you.** It is delivered as `initialUserMessage`, which is prepended
+to your first prompt and rendered in the **transcript** — so it appears on every surface,
+terminal and VS Code / Cursor extension alike (both verified by observation).
 
-| surface | `systemMessage` (user sees it) | `additionalContext` (Claude sees it) |
-|---------|-------------------------------|--------------------------------------|
-| terminal CLI | **yes** — `SessionStart:startup says: …` | yes |
-| VS Code / Cursor extension | **no — nothing is displayed** | yes |
+`systemMessage` was tried first and dropped: it renders in the terminal CLI **only**, so IDE
+users saw nothing at all. Keeping both would have shown terminal users the same warning
+twice. `additionalContext` is also emitted, so Claude knows enforcement is narrowed even if
+the visual channel ever changes.
 
-So in the IDE extension the warning reaches **Claude only**. You get no visible signal that
-`.gitignore` enforcement is off; Claude knows, and will say so if it matters, but nothing
-appears on screen. Treat the notice as a terminal-only affordance and don't rely on its
-absence to mean the merge is on — check `CLAUDEIGNORE_NO_GITIGNORE` directly if it matters.
+Because `initialUserMessage` lands inside a *user* turn, the text is explicitly labelled as
+hook output. A warning that arrives where your instructions arrive must say so, or it is
+indistinguishable from something you asked for.
 
 (Worth noting the docs' per-event table lists `SessionStart` as "context only", which reads
 as though `systemMessage` could never work. It does — that restriction governs *decision

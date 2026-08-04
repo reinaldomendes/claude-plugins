@@ -320,8 +320,9 @@ if [ -f "$NOTICE" ]; then
         "${@:2}" CLAUDE_PROJECT_DIR="$1" bash "$NOTICE" 2>/dev/null; }
   o=$(nrun "$A" CLAUDEIGNORE_NO_GITIGNORE=1)
   [ -n "$o" ] && ok "notice: fires in isolated mode when a .gitignore exists" || no "notice should fire"
-  echo "$o" | jq -e '.systemMessage' >/dev/null 2>&1 \
-    && ok "notice: emits systemMessage (terminal-visible)" || no "notice lacks systemMessage"
+  echo "$o" | jq -e 'has("systemMessage")|not' >/dev/null 2>&1 \
+    && ok "notice: no systemMessage (terminal-only; would double up with initialUserMessage)" \
+    || no "systemMessage came back — it duplicates the notice in the terminal"
   echo "$o" | jq -e '.hookSpecificOutput.initialUserMessage' >/dev/null 2>&1 \
     && ok "notice: emits initialUserMessage (transcript-visible, reaches IDE surfaces)" \
     || no "notice lacks initialUserMessage"
@@ -354,7 +355,7 @@ if [ -f "$NOTICE" ]; then
     | env -u CLAUDEIGNORE_QUIET -u CLAUDEIGNORE_DISABLED CLAUDEIGNORE_NO_GITIGNORE=1 \
         CLAUDE_PROJECT_DIR="$Z" bash "$NOTICE" 2>&1 >/dev/null)
   o=$(nrun "$Z" CLAUDEIGNORE_NO_GITIGNORE=1)
-  { [ -z "$err" ] && [ -n "$o" ] && echo "$o" | jq -e '.systemMessage' >/dev/null 2>&1; } \
+  { [ -z "$err" ] && [ -n "$o" ] && echo "$o" | jq -e '.hookSpecificOutput.initialUserMessage' >/dev/null 2>&1; } \
     && ok "notice: fires cleanly when a comments-only .git/info/exclude is present" \
     || no "comments-only info/exclude broke the notice (err='$err')"
   rm -rf "$Z"
