@@ -18,7 +18,7 @@ what it claims to cover, or a way to make the honest caveat actionable.
 | ~~3~~ | ~~Generate `permissions.deny` from `.claudeignore`~~ | **declined 0.5.5** | The problem was framed wrongly: the right deny list is 2-3 paths, not a translation of every ignore rule. Replaced by a README section. |
 | ~~4~~ | ~~Scope caveat above the fold~~ | **done 0.5.4** | Callout directly under the tagline, before anything else. |
 | ~~5~~ | ~~Mirror hygiene and identity~~ | **done 0.5.1-0.5.3** | Hijack closed (per-uid 0700), debuggability closed (README.txt), key strengthened (64-bit SHA-1). Collection declined with reason. |
-| 6 | Spike `Grep` redaction via `PostToolUse` | spike | "Impossible" may be overstated; worth knowing before docs commit to it. |
+| ~~6~~ | ~~Spike `Grep` redaction via `PostToolUse`~~ | **declined 0.5.6** | Moot: a `Read` deny rule already covers `Grep`, `Glob` and recognised `Bash` file commands. The platform solves it. |
 | ~~7~~ | ~~Quote expansions used as patterns~~ | **done 0.5.4 — was NOT a nit** | A project path with `[`/`*`/`?` disabled enforcement entirely and silently. 12 cases added. |
 
 ---
@@ -326,27 +326,39 @@ per-call cost is measured, so the number isn't read as a regression.
 
 ---
 
-## 6. Spike: `Grep` redaction via `PostToolUse`
+## 6. Spike: `Grep` redaction via `PostToolUse` — DECLINED
 
-**Problem.** The README says `Grep`/`Glob` cannot be covered because they take a directory
-and a pattern rather than a file path. True at `PreToolUse` — but `PostToolUse` sees the
-*output*, and that output carries file paths.
+**Declined in 0.5.6, before spending the hour**, because the question the spike existed to
+answer turned out to be answered in the permissions documentation. Reading it first was worth
+more than running the experiment.
 
-**Proposal.** Timeboxed experiment, not a commitment: a `PostToolUse` hook on `Grep` that
-drops result lines belonging to excluded files and appends a count of what was withheld.
+> "Claude makes a best-effort attempt to apply `Read` rules to all built-in tools that read
+> files like Grep and Glob"
+>
+> "Read and Edit deny rules apply to Claude's built-in file tools and to file commands Claude
+> Code recognizes in Bash, such as `cat`, `head`, `tail`, and `sed`."
+> — [Configure permissions](https://code.claude.com/docs/en/permissions)
 
-**Why it's worth an hour.** The leak the article's readers care about is filename-keyed —
-grepping for a token name and getting the line from `.env`. If that specific case closes,
-the plugin's headline claim gets materially more true. If the output shape turns out to be
-unreliable across `Grep`'s modes, the finding is still useful: the README can then say
-*tried, and here is why not* instead of *not possible*, which is a stronger claim.
+So the leak the spike targeted — grep for a token name, receive the line from `.env` — is
+already closed by a `Read(.env)` deny rule, which also happens to use gitignore syntax. There
+is no reason to build a redaction hook that partially reimplements a boundary the harness
+already enforces properly, and every reason not to: partial coverage in one grep mode would be
+worse than none.
 
-**Why it stays a spike.** Redaction that works in `files_with_matches` mode and fails in
-`content` mode would be worse than no redaction, because partial invisible coverage is
-untrustworthy coverage. The experiment decides whether item 6 becomes a feature or a
-documented dead end.
+**What this changes elsewhere in this document.** Two earlier claims were wrong and are
+corrected in the README:
 
----
+- "`Bash` and `Grep` cannot be covered" — true of *this hook*, false of Claude Code. The
+  README now says the gap is in the hook, not the platform, and points at deny rules as the
+  recommended answer rather than a consolation prize.
+- Item 3's decline argued in part that gitignore semantics "have no equivalent in deny rules".
+  They do — deny rules *use* gitignore syntax. That sub-argument was wrong. The decline still
+  stands on its main argument: the right deny list is two or three paths you choose
+  deliberately, not a translation of an ignore file that is mostly noise control.
+
+**What genuinely remains uncovered**, and is now stated in the README: arbitrary subprocesses
+that open files themselves — a Python or Node script, `docker exec`, anything the shell parser
+does not recognise. The documented answer there is the sandbox, not a hook.
 
 ## 7. Quote expansions used as patterns
 
