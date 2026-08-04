@@ -319,8 +319,8 @@ Measured on a ~900-file Vue monorepo (1812 directories, 6 `.gitignore`, 2 `.clau
 
 | | before this design | now |
 |---|---|---|
-| first call of a session | — | ~132ms (one full `find` + mirror build) |
-| every call after | ~85ms | **~30ms** |
+| first call of a session | — | ~129ms (one full `find` + mirror build) |
+| every call after | ~85ms | **~33ms** |
 
 Of that 30ms, ~19ms is a single `jq` invocation parsing the hook input — measured, and the
 reason the hook parses its input exactly once. `git check-ignore` itself is under 1ms.
