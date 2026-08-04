@@ -15,7 +15,7 @@ what it claims to cover, or a way to make the honest caveat actionable.
 |---|------|------|-------------------|
 | ~~1~~ | ~~Resolve symlinks before matching~~ | **done 0.5.0** | Fixed; 8 cases in the suite, incl. dir links, broken links and out-of-project links. |
 | ~~2~~ | ~~Unbuildable mirror must not fail open~~ | **done 0.5.0** | `_ci_ensure` now returns a third outcome; warn-and-allow, or deny under `CLAUDEIGNORE_STRICT=1`. |
-| 3 | Generate `permissions.deny` from `.claudeignore` | **parked** | Planned (see below). Parked pending step 0: whether a `Read()` deny governs `Bash` at all. |
+| ~~3~~ | ~~Generate `permissions.deny` from `.claudeignore`~~ | **declined 0.5.5** | The problem was framed wrongly: the right deny list is 2-3 paths, not a translation of every ignore rule. Replaced by a README section. |
 | ~~4~~ | ~~Scope caveat above the fold~~ | **done 0.5.4** | Callout directly under the tagline, before anything else. |
 | ~~5~~ | ~~Mirror hygiene and identity~~ | **done 0.5.1-0.5.3** | Hijack closed (per-uid 0700), debuggability closed (README.txt), key strengthened (64-bit SHA-1). Collection declined with reason. |
 | 6 | Spike `Grep` redaction via `PostToolUse` | spike | "Impossible" may be overstated; worth knowing before docs commit to it. |
@@ -119,7 +119,44 @@ no-rules case stays silent — it must not regress into warning on every clean p
 
 ---
 
-## 3. Generate `permissions.deny` from `.claudeignore`
+## 3. Generate `permissions.deny` from `.claudeignore` — DECLINED
+
+**Declined in 0.5.5**, in favour of a short README section. The original reasoning is kept
+below because a rejected proposal with its argument is worth as much as an accepted one — it
+stops the same idea returning.
+
+**Why it was declined.** The proposal rests on "translating gitignore patterns into
+permission rules by hand, for every project, is clerical work that will not get done". That
+assumes the deny list is a *translation of the ignore file*. It is not. Look at what a real
+`.claudeignore` contains — `dist/*`, `logs/`, `node_modules/`, `src/components.d.ts` — noise
+control, none of which belongs in `permissions.deny`. The rules that warrant a hard boundary
+are the two or three paths the user already knows:
+
+```json
+"permissions": { "deny": ["Read(./.env)", "Read(./.env.*)", "Read(./env/**)"] }
+```
+
+A thirty-second edit, once, not a clerical burden needing a generator.
+
+Set against that, the feature costs a translator library, a command, a merge-into-settings
+path and a refusal system — and on a realistic input it refuses immediately: a `.claudeignore`
+holding `!dist/client/` and `!.env.example` poisons those neighbourhoods, so the user receives
+a partial list plus a list of excuses, for paths that mostly should not be denied anyway.
+
+The premise underneath it was also never verified: if a `Read()` deny does not govern `Bash`,
+the feature does not do the thing it was proposed to do.
+
+**What replaces it.** A README section stating that `permissions.deny` is the boundary for
+genuinely sensitive paths, with the worked example above, and — importantly — *why it is a
+handful of lines rather than a translation of your ignore file*. Same gap closed for the
+cases that matter, at a fraction of the surface.
+
+**What survives independently.** Step 0 below is still worth running, whatever happens to
+this item: whether a `Read()` deny governs `Bash` decides what the README may claim, and it
+makes item 6's spike more or less interesting. Kept as an open question, not as work.
+
+<details>
+<summary>The original proposal and plan, for the record</summary>
 
 **Problem.** The README correctly says the real boundary is `permissions.deny`, then leaves
 the user to hand-write it. They won't. Translating gitignore patterns into permission rules
@@ -216,6 +253,9 @@ valuable item left. If not, it is still worth building — but the README wordin
 item 6's spike becomes more interesting rather than less.
 
 ---
+
+
+</details>
 
 ## 4. Move the scope caveat above the fold
 

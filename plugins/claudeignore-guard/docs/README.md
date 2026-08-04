@@ -68,11 +68,39 @@ fails *silently*, a `SessionStart` notice tells you how many rules are being ski
   there is nothing to match a rule against without re-implementing their traversal.
 
 **So this is context hygiene, not a security boundary.** For a hard boundary use
-`permissions.deny` in `settings.json`, which the harness enforces at every entry point:
+`permissions.deny`, which the harness enforces rather than a hook.
+
+### Deny rules for the paths that actually matter
+
+Add these once, to `.claude/settings.local.json` (or `settings.json` if the whole team
+should get them):
 
 ```json
-"permissions": { "deny": ["Read(./.env)", "Read(./secrets/**)"] }
+"permissions": {
+  "deny": [
+    "Read(./.env)",
+    "Read(./.env.*)",
+    "Read(./env/**)",
+    "Read(./secrets/**)"
+  ]
+}
 ```
+
+**Do not try to translate your whole `.claudeignore` into deny rules.** They answer
+different questions. A `.claudeignore` is mostly noise control — `dist/*`, `logs/`,
+`node_modules/`, generated `.d.ts` files — and none of that belongs in a permission
+boundary; blocking it there only produces confusing refusals when you legitimately need to
+look at a build output. The deny list is for the handful of paths that must never be read
+whatever else fails: credentials, keys, customer data.
+
+That is also why this plugin does not generate the list for you. Two or three lines you
+write deliberately beat a generated block you did not read — and gitignore negations
+(`!.env.example`, `!dist/client/`) have no equivalent in deny rules, so anything generated
+would either drop them or over-block the paths they re-include.
+
+Deny rules cover the tools they name. If you also want `Bash` constrained, that is a
+separate rule of a different shape (`Bash(...)` takes command patterns, not paths) — and
+worth confirming against your own setup before relying on it.
 
 ## Hooks
 
