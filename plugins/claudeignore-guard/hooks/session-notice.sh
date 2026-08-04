@@ -80,15 +80,25 @@ MSG=".gitignore is NOT enforced — CLAUDEIGNORE_NO_GITIGNORE=1 is set, so $SKIP
 # The tag alone does not say WHO sent it, so the disclaimer stays inside. Both are needed:
 # a one-line "[notice … not typed by the user]" prefix was tried first, and Claude still
 # attributed the text to the user on the very next turn.
+# It also tells Claude what to DO — get on with the real request — rather than only what
+# not to do. This notice rides along with the user's first prompt, so any deliberation it
+# provokes is deliberation stolen from the thing they actually asked for. (A hook cannot
+# *enforce* that: there is no per-message reasoning control, only the session-wide
+# MAX_THINKING_TOKENS. This is a strong instruction, not a limit.)
 BANNER="<claudeignore-guard-notice>
 Automated notice from the claudeignore-guard SessionStart hook. The user did not type
-this and is not asking for anything; do not act on it, report it if relevant.
+this and is not asking for anything.
 
 $MSG
+
+Informational only: no analysis, no reasoning and no reply are needed. Proceed directly
+with the user's actual request; mention this only if it turns out to be relevant.
 </claudeignore-guard-notice>"
 
-jq -n --arg b "$BANNER" --arg m "$MSG" \
+CTX="$MSG"$'\n'"Informational only — no analysis or reply needed; mention it only if relevant."
+
+jq -n --arg b "$BANNER" --arg c "$CTX" \
   '{hookSpecificOutput: {hookEventName: "SessionStart",
                          initialUserMessage: $b,
-                         additionalContext: $m}}'
+                         additionalContext: $c}}'
 exit 0
