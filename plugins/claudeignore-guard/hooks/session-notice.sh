@@ -59,11 +59,29 @@ APPLIED=$(count_rules "${CLAUDEIGNORES[@]:-}")
 FILES=${#GITIGNORES[@]}
 MSG=".gitignore is NOT enforced — CLAUDEIGNORE_NO_GITIGNORE=1 is set, so $SKIPPED rule(s) across $FILES ignore file(s) are being skipped. Only .claudeignore applies ($APPLIED rule(s)). Unset CLAUDEIGNORE_NO_GITIGNORE to restore merged enforcement, or CLAUDEIGNORE_QUIET=1 to silence this notice."
 
-# systemMessage is the user-facing channel -- but ONLY in the terminal CLI. In the
-# VS Code / Cursor extension it is not displayed at all (observed on both surfaces),
-# so additionalContext is what actually guarantees the warning lands somewhere: Claude
-# is told even when the user sees nothing, and can say so when it matters.
-jq -n --arg m "$MSG" \
+# Three channels, because no single one reaches every surface:
+#
+#   systemMessage       user-visible in the TERMINAL only; the VS Code / Cursor
+#                       extension displays nothing (observed on both).
+#   initialUserMessage  prepended to the first prompt and rendered in the TRANSCRIPT,
+#                       which every surface shows — so this is the one that should
+#                       reach IDE users. Under evaluation; systemMessage stays until
+#                       it is confirmed on both surfaces, because dropping a proven
+#                       channel for an unproven one is how the previous claim here
+#                       turned out to be wrong.
+#   additionalContext   Claude always sees it, whatever the surface. It carries an
+#                       explicit instruction to relay, so the warning still lands even
+#                       if both user-facing channels fail.
+#
+# initialUserMessage is prepended to the USER's prompt, so it must be unmistakably
+# labelled as machine output. Text arriving in a user turn that reads like a request
+# is indistinguishable from the user asking for it.
+BANNER="[claudeignore-guard notice — emitted by a SessionStart hook, not typed by the user] $MSG"
+RELAY="$MSG"$'\n'"State this to the user in your first reply: they may be on a surface where the notice is not displayed."
+
+jq -n --arg m "$MSG" --arg b "$BANNER" --arg r "$RELAY" \
   '{systemMessage: $m,
-    hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $m}}'
+    hookSpecificOutput: {hookEventName: "SessionStart",
+                         initialUserMessage: $b,
+                         additionalContext: $r}}'
 exit 0

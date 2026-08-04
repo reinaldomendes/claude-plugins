@@ -320,8 +320,18 @@ if [ -f "$NOTICE" ]; then
         "${@:2}" CLAUDE_PROJECT_DIR="$1" bash "$NOTICE" 2>/dev/null; }
   o=$(nrun "$A" CLAUDEIGNORE_NO_GITIGNORE=1)
   [ -n "$o" ] && ok "notice: fires in isolated mode when a .gitignore exists" || no "notice should fire"
-  echo "$o" | jq -e '.systemMessage // .hookSpecificOutput.additionalContext' >/dev/null 2>&1 \
-    && ok "notice: emits systemMessage or additionalContext" || no "notice emitted no user-facing field"
+  echo "$o" | jq -e '.systemMessage' >/dev/null 2>&1 \
+    && ok "notice: emits systemMessage (terminal-visible)" || no "notice lacks systemMessage"
+  echo "$o" | jq -e '.hookSpecificOutput.initialUserMessage' >/dev/null 2>&1 \
+    && ok "notice: emits initialUserMessage (transcript-visible, reaches IDE surfaces)" \
+    || no "notice lacks initialUserMessage"
+  echo "$o" | jq -e '.hookSpecificOutput.additionalContext' >/dev/null 2>&1 \
+    && ok "notice: emits additionalContext (Claude always sees it)" || no "notice lacks additionalContext"
+  # initialUserMessage lands inside a USER turn, so it must announce itself as machine
+  # output — otherwise a warning is indistinguishable from something the user asked for.
+  echo "$o" | jq -r '.hookSpecificOutput.initialUserMessage' | grep -q 'not typed by the user' \
+    && ok "notice: initialUserMessage is labelled as hook output, not a user request" \
+    || no "initialUserMessage must be labelled as machine-emitted"
   o=$(nrun "$A"); [ -z "$o" ] && ok "notice: silent in merge mode" || no "notice should be silent by default"
   o=$(nrun "$A" CLAUDEIGNORE_NO_GITIGNORE=1 CLAUDEIGNORE_QUIET=1)
   [ -z "$o" ] && ok "notice: CLAUDEIGNORE_QUIET=1 silences it" || no "QUIET should silence the notice"
