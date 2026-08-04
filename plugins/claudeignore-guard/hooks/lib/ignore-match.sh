@@ -46,9 +46,18 @@ _ci_set_names() {
 }
 
 # Path of the mirror tree for a project root.
+#
+# The MODE is part of the identity, not just the project. A mirror built with the
+# merge on holds .gitignore rules baked into its merged files; flipping
+# CLAUDEIGNORE_NO_GITIGNORE would otherwise keep enforcing them, because the
+# freshness pass only rebuilds directories whose SOURCES changed — and flipping a
+# flag changes no source. Two mirrors also let sessions in different modes run
+# concurrently without rebuilding each other's work on every call.
 _ci_mirror_dir() {
-  printf '%s/claudeignore-guard/%s' \
-    "${TMPDIR:-/tmp}" "$(printf '%s' "$1" | cksum | cut -d' ' -f1)"
+  local mode=merged
+  _ci_merge_enabled || mode=claudeonly
+  printf '%s/claudeignore-guard/%s-%s' \
+    "${TMPDIR:-/tmp}" "$(printf '%s' "$1" | cksum | cut -d' ' -f1)" "$mode"
 }
 
 # cat a file, guaranteeing it ends in a newline. Without this a source whose last

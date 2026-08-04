@@ -286,11 +286,38 @@ o=$(printf '{"session_id":"S2","tool_input":{"file_path":"%s"}}' "$FR/late/d" \
   && ok "freshness: a new session rescans and picks it up" || no "new session should rescan"
 rm -rf "$FR"
 
+# --- mode switch must invalidate the mirror ------------------------------------------
+# Regression: found in live use, not by this suite. The helpers above pass NO session_id,
+# so _ci_ensure always took the full-rescan branch and rebuilt the mirror under whichever
+# mode was current — hiding the bug entirely. The real hook DOES pass a session id, takes
+# the cheap refresh path, and a refresh only rebuilds directories whose SOURCES changed.
+# Flipping the flag changes no source, so a mirror built merged kept enforcing .gitignore
+# after the opt-out was set. These cases pin the fix by holding the session id fixed.
+MS=$(mktemp -d); mkdir -p "$MS/secrets"
+printf '/secrets/*\n' > "$MS/.gitignore"
+printf '/nothing-here\n' > "$MS/.claudeignore"
+touch "$MS/secrets/x"
+msrun() { # $1=relpath $2=flag-value ; SAME session id every time, as a real session does
+  local o; o=$(printf '{"session_id":"FIXED","tool_input":{"file_path":"%s"}}' "$MS/$1" \
+    | env -u CLAUDEIGNORE_DISABLED CLAUDEIGNORE_NO_GITIGNORE="$2" CLAUDE_PROJECT_DIR="$MS" bash "$HOOK" 2>/dev/null)
+  if [ -z "$o" ]; then echo allow; else echo "$o" | jq -r '.hookSpecificOutput.permissionDecision'; fi
+}
+[ "$(msrun secrets/x 0)" = "deny" ]  && ok "mode switch: merged denies a .gitignore-only path" \
+                                     || no "merged should deny"
+[ "$(msrun secrets/x 1)" = "allow" ] && ok "mode switch: flipping to NO_GITIGNORE=1 allows it in the SAME session" \
+                                     || no "stale mirror — the opt-out did not take effect"
+[ "$(msrun secrets/x 0)" = "deny" ]  && ok "mode switch: flipping back re-denies (both directions)" \
+                                     || no "flipping back should deny again"
+rm -rf "$MS"
+
 # --- isolated-mode notice -------------------------------------------------------------
 NOTICE="$REPO/plugins/claudeignore-guard/hooks/session-notice.sh"
 if [ -f "$NOTICE" ]; then
+  # Unset BOTH flags: the suite must not inherit whatever the developer running it
+  # happens to have exported, or "default behaviour" silently means something else.
   nrun() { printf '{"session_id":"t","hook_event_name":"SessionStart"}' \
-    | env -u CLAUDEIGNORE_QUIET "${@:2}" CLAUDE_PROJECT_DIR="$1" bash "$NOTICE" 2>/dev/null; }
+    | env -u CLAUDEIGNORE_QUIET -u CLAUDEIGNORE_NO_GITIGNORE -u CLAUDEIGNORE_DISABLED \
+        "${@:2}" CLAUDE_PROJECT_DIR="$1" bash "$NOTICE" 2>/dev/null; }
   o=$(nrun "$A" CLAUDEIGNORE_NO_GITIGNORE=1)
   [ -n "$o" ] && ok "notice: fires in isolated mode when a .gitignore exists" || no "notice should fire"
   echo "$o" | jq -e '.systemMessage // .hookSpecificOutput.additionalContext' >/dev/null 2>&1 \
