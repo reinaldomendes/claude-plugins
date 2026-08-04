@@ -84,9 +84,15 @@ users saw nothing at all. Keeping both would have shown terminal users the same 
 twice. `additionalContext` is also emitted, so Claude knows enforcement is narrowed even if
 the visual channel ever changes.
 
-Because `initialUserMessage` lands inside a *user* turn, the text is explicitly labelled as
-hook output. A warning that arrives where your instructions arrive must say so, or it is
-indistinguishable from something you asked for.
+Because `initialUserMessage` lands inside a *user* turn, the notice is wrapped in a
+`<claudeignore-guard-notice>` tag — the same convention Claude Code uses for its own
+injected context (`<system-reminder>`, `<git-state>`) — with an explicit "the user did not
+type this" inside it.
+
+Both parts are needed, and that is not theoretical: with only a one-line `[notice … not
+typed by the user]` prefix, Claude attributed the text to the user on the very next turn.
+**Anything you put in `initialUserMessage` will be read as the user speaking unless the
+framing is structural.** Worth knowing for any hook that uses this field, not just this one.
 
 (Worth noting the docs' per-event table lists `SessionStart` as "context only", which reads
 as though `systemMessage` could never work. It does — that restriction governs *decision

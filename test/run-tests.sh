@@ -331,8 +331,9 @@ if [ -f "$NOTICE" ]; then
   # initialUserMessage lands inside a USER turn, so it must announce itself as machine
   # output — otherwise a warning is indistinguishable from something the user asked for.
   b=$(echo "$o" | jq -r '.hookSpecificOutput.initialUserMessage')
-  { echo "$b" | grep -q 'NOT FROM THE USER' && echo "$b" | grep -q 'not asking for anything' \
-    && echo "$b" | grep -q 'END AUTOMATED NOTICE'; } \
+  { echo "$b" | grep -q '^<claudeignore-guard-notice>' \
+    && echo "$b" | grep -q '</claudeignore-guard-notice>$' \
+    && echo "$b" | grep -q 'did not type'; } \
     && ok "notice: initialUserMessage is unmistakably framed as machine output" \
     || no "initialUserMessage framing too weak — it lands in a USER turn and gets read as the user speaking"
   o=$(nrun "$A"); [ -z "$o" ] && ok "notice: silent in merge mode" || no "notice should be silent by default"
