@@ -53,7 +53,50 @@ esac
 # Collapse a leading ./ and any /./ so prefix comparisons hold.
 ABS="${ABS//\/.\//\/}"
 
-WHY=$(ci_is_ignored "$ABS" "$ROOT" "$SESSION_ID") || exit 0
+# Judge the literal path FIRST, then — only if it was allowed — the resolved one.
+#
+# `Read` follows symlinks while this hook matches path strings, so without the second
+# check a rule saying `.env` blocks `.env` and waves through `config/local.env -> ../.env`.
+# That is not just an attack: checked-in config links and `current -> releases/…` deploy
+# layouts do exactly this, and the miss looks identical to success — the very failure this
+# plugin exists to correct, reproduced inside it.
+#
+# Order matters. Matching the literal path first keeps every denial message quoting the
+# rule against the path the user typed and can see. The resolved path is a second chance
+# to DENY, never a first chance to allow.
+#
+# A link pointing OUT of the project stays unjudged: ci_is_ignored declines paths outside
+# $CLAUDE_PROJECT_DIR, and widening that would mean deciding whose ignore rules govern
+# another repository's files. `readlink -f` on a path that does not exist prints nothing
+# and fails, which is the right answer for a Write to a new file.
+WHY=$(ci_is_ignored "$ABS" "$ROOT" "$SESSION_ID"); RC=$?
+if [ "$RC" != 0 ]; then
+  if [ "$RC" = 2 ]; then
+    # The mirror could not be built — do NOT pass this off as "nothing to enforce".
+    BROKE="claudeignore-guard could not build its rule mirror under \${TMPDIR:-/tmp}, so
+.claudeignore is NOT being enforced in this session. Usual causes: a read-only or full
+TMPDIR, a restrictive umask, or a mirror directory owned by another user.
+Set CLAUDEIGNORE_STRICT=1 to deny reads instead of allowing them when this happens."
+    if [ "${CLAUDEIGNORE_STRICT:-0}" = "1" ]; then
+      jq -n --arg r "$BROKE" \
+        '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
+    else
+      # Warn and allow by default: failing closed on a broken TMPDIR would deny every read
+      # in the project, including files no rule mentions — a hygiene tool has no business
+      # halting a session over its own scratch directory. Loud beats silent; blocking
+      # everything is louder than it needs to be.
+      jq -n --arg r "$BROKE" \
+        '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"allow",permissionDecisionReason:$r}}'
+    fi
+    exit 0
+  fi
+  RES=$(readlink -f "$ABS" 2>/dev/null) || RES=""
+  if [ -n "$RES" ] && [ "$RES" != "$ABS" ]; then
+    WHY=$(ci_is_ignored "$RES" "$ROOT" "$SESSION_ID") || exit 0
+  else
+    exit 0
+  fi
+fi
 
 REL="${ABS#$ROOT/}"
 SRC="${WHY%%:*}"                 # which file the winning rule lives in

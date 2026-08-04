@@ -148,6 +148,18 @@ _ci_scan() {
   _ci_sync_info_exclude "$root" "$mirror"
 }
 
+# Does the PROJECT carry anything to enforce? Answered without touching the mirror, so
+# "no rules" can never be confused with "the mirror could not be built". Cheap: stops at
+# the first hit.
+_ci_has_sources() {
+  local root="$1" hit
+  _ci_merge_enabled && [ -s "$root/.git/info/exclude" ] && return 0
+  hit=$(cd "$root" 2>/dev/null && find . \( "${_CI_PRUNE[@]}" \) -prune -o \
+        \( -name .claudeignore $(_ci_merge_enabled && printf '%s' "-o -name .gitignore") \) \
+        -size +0c -print -quit 2>/dev/null)
+  [ -n "$hit" ]
+}
+
 _ci_sync_info_exclude() {
   local root="$1" mirror="$2"
   : > "$mirror/.git/info/exclude" 2>/dev/null
@@ -196,30 +208,46 @@ _ci_refresh() {
 }
 
 # Ensure the mirror reflects the project, doing the least work that is still correct.
-# Echoes the mirror path; returns non-zero when there is nothing to enforce.
+# Echoes the mirror path. Three outcomes, because two of them used to be one:
+#   0  enforce — the mirror is usable
+#   1  nothing to enforce — no rules here; the documented, silent no-op
+#   2  COULD NOT BUILD — read-only or full $TMPDIR, hostile umask, a mirror owned by
+#      another user, git init failing
+# Collapsing 2 into 1 meant enforcement silently evaporated and looked exactly like a
+# project with no ignore files: no output, no error, every read allowed. That is the one
+# failure this plugin cannot afford, since its whole value is that a written rule can be
+# trusted — and it is environment-dependent, so it surfaces as "worked on my laptop, not
+# in the container" long after anyone is thinking about it.
 _ci_ensure() {
   local root="$1" session="$2" mirror stamp
 
   local seen=""
-  mirror=$(_ci_mirror_dir "$root")
-  mkdir -p "$mirror" 2>/dev/null || return 1
-  [ -d "$mirror/.git" ] || git -C "$mirror" init -q 2>/dev/null || return 1
-  stamp="$mirror/.ci-stamp"
+  # Whether this project has any rules at all is decided from the PROJECT, not from the
+  # mirror — otherwise a mirror that cannot be built is indistinguishable from a project
+  # with nothing to enforce, which is exactly how the fail-open arose.
   _ci_set_names
+  _ci_has_sources "$root" || return 1
+
+  mirror=$(_ci_mirror_dir "$root")
+  mkdir -p "$mirror" 2>/dev/null || return 2
+  [ -w "$mirror" ] || return 2
+  [ -d "$mirror/.git" ] || git -C "$mirror" init -q 2>/dev/null || return 2
+  stamp="$mirror/.ci-stamp"
 
   # Discovery is session-scoped rather than time-scoped: no clock, no tunable
   # staleness window. Anything already on the manifest is checked every call.
   # `read` is a builtin; `$(cat …)` here would fork on every single call.
   [ -f "$stamp" ] && read -r seen < "$stamp" 2>/dev/null
   if [ ! -s "$mirror/.ci-dirs" ] || [ -z "$session" ] || [ "$seen" != "$session" ]; then
-    _ci_scan "$root" "$mirror"
-    printf '%s\n' "$session" > "$stamp"
+    _ci_scan "$root" "$mirror" || return 2
+    printf '%s\n' "$session" > "$stamp" 2>/dev/null || return 2
     _ci_refresh "$root" "$mirror"      # also computes _CI_ACTIVE
   else
     _ci_refresh "$root" "$mirror"
   fi
 
-  [ "${_CI_ACTIVE:-1}" = 0 ] || return 1
+  # Sources exist but the mirror holds nothing → the build failed rather than "no rules".
+  [ "${_CI_ACTIVE:-1}" = 0 ] || return 2
   printf '%s' "$mirror"
 }
 
@@ -251,14 +279,17 @@ _ci_attribute() {
 # user exactly which rule blocked them, in the file they actually edit.
 # The session id scopes the discovery scan; omit it and every call rescans, which
 # is correct but slower.
+# Returns 2 when the mirror could not be built, so the caller can say so instead of
+# treating a broken environment as "nothing to enforce".
 ci_is_ignored() {
-  local target="$1" root="$2" session="${3:-}" mirror rel verdict
+  local target="$1" root="$2" session="${3:-}" mirror rel verdict rc
   command -v git >/dev/null 2>&1 || return 1
 
   # Only ever judge paths inside the project.
   case "$target" in "$root"/*) rel="${target#$root/}" ;; *) return 1 ;; esac
 
-  mirror=$(_ci_ensure "$root" "$session") || return 1
+  mirror=$(_ci_ensure "$root" "$session"); rc=$?
+  [ "$rc" = 0 ] || return "$rc"
 
   # The verdict comes from -q, NOT from -v. With -v, git exits 0 for ANY matching
   # rule *including a negation*, so `!.env.example` would read as "ignored". Only

@@ -302,6 +302,71 @@ o=$(printf '{"session_id":"S2","tool_input":{"file_path":"%s"}}' "$FR/late/d" \
   && ok "freshness: a new session rescans and picks it up" || no "new session should rescan"
 rm -rf "$FR"
 
+# --- symlinks: a link to an excluded file must not read straight through --------------
+# `Read` follows symlinks; the hook matches path strings. Without resolving, a rule saying
+# `.env` blocks `.env` and not `config/local.env -> ../.env`. Not merely adversarial:
+# checked-in config links and `current -> releases/…` deploy layouts do exactly this, and
+# the failure looks identical to success — the plugin's own headline failure mode.
+sect "claudeignore-guard: symlinks"
+SL=$(mktemp -d); mkdir -p "$SL/sub" "$SL/pub"
+printf '.env\nsecrets/\n' > "$SL/.claudeignore"
+printf 'SECRET=x\n' > "$SL/.env"; mkdir -p "$SL/secrets"; touch "$SL/secrets/k" "$SL/pub/ok.txt"
+ln -s .env          "$SL/link.txt"
+ln -s ../.env       "$SL/sub/alias.txt"
+ln -s secrets       "$SL/dirlink"
+ln -s pub/ok.txt    "$SL/fine.txt"
+ln -s /etc/hostname "$SL/outside.txt"
+ln -s nowhere       "$SL/broken.txt"
+slcase() { # $1=relpath $2=want
+  local got; got=$(gverdict "$SL" "$1")
+  [ "$got" = "$2" ] && ok "symlink: $3" || no "symlink: $3 — got '$got', want '$2'"
+}
+slcase .env           deny  "the real file is denied"
+slcase link.txt       deny  "a link to an excluded file is denied (was a bypass)"
+slcase sub/alias.txt  deny  "a relative link from a subdirectory is denied"
+slcase dirlink/k      deny  "a link to an excluded DIRECTORY is denied"
+slcase fine.txt       allow "a link to an allowed file stays readable"
+slcase outside.txt    allow "a link pointing outside the project stays unjudged"
+slcase broken.txt     allow "a broken link is allowed, not an error"
+err=$(printf '{"session_id":"s","tool_input":{"file_path":"%s"}}' "$SL/broken.txt" \
+  | env -u CLAUDEIGNORE_NO_GITIGNORE -u CLAUDEIGNORE_DISABLED CLAUDE_PROJECT_DIR="$SL" bash "$HOOK" 2>&1 >/dev/null \
+  | grep -v 'existing sandbox was detected' || true)
+[ -z "$err" ] && ok "symlink: broken link produces no stderr" || no "broken link wrote to stderr: $err"
+# The denial must still quote the rule against the path the USER typed.
+gwhy "$SL" link.txt | grep -q '\.claudeignore:1' \
+  && ok "symlink: denial still cites .claudeignore:1" || no "denial lost its provenance"
+rm -rf "$SL"
+
+# --- an unbuildable mirror must not silently stop enforcing ---------------------------
+# "No rules to enforce" and "could not build the mirror" are opposite situations that both
+# ended in exit 1, which the hook read as allow. A read-only or full TMPDIR therefore
+# disabled the guard with no output at all — indistinguishable from a clean project.
+sect "claudeignore-guard: unbuildable mirror"
+UB=$(mktemp -d); printf '.env\n' > "$UB/.claudeignore"; printf 'S=1\n' > "$UB/.env"
+RO=$(mktemp -d); chmod 500 "$RO"          # readable, not writable → mirror cannot be built
+ubrun() { printf '{"session_id":"s","tool_input":{"file_path":"%s"}}' "$UB/.env" \
+  | env -u CLAUDEIGNORE_NO_GITIGNORE -u CLAUDEIGNORE_DISABLED -u CLAUDEIGNORE_STRICT \
+      "$@" TMPDIR="$RO" CLAUDE_PROJECT_DIR="$UB" bash "$HOOK" 2>/dev/null; }
+o=$(ubrun)
+{ [ -n "$o" ] && echo "$o" | jq -e '.hookSpecificOutput.permissionDecisionReason' >/dev/null 2>&1; } \
+  && ok "unbuildable: says something rather than failing open silently" \
+  || no "unbuildable mirror produced no output — enforcement vanished silently"
+echo "$o" | jq -r '.hookSpecificOutput.permissionDecisionReason // ""' | grep -qi 'could not\|unable' \
+  && ok "unbuildable: the reason names the real problem" || no "reason should say the mirror could not be built"
+[ "$(echo "$o" | jq -r '.hookSpecificOutput.permissionDecision // "none"')" = "allow" ] \
+  && ok "unbuildable: allows by default (a broken TMPDIR must not block every read)" \
+  || no "default should warn-and-allow"
+o=$(ubrun CLAUDEIGNORE_STRICT=1)
+[ "$(echo "$o" | jq -r '.hookSpecificOutput.permissionDecision // "none"')" = "deny" ] \
+  && ok "unbuildable: CLAUDEIGNORE_STRICT=1 fails closed instead" || no "STRICT should deny"
+# A genuinely rule-free project must stay silent — the warning must not fire everywhere.
+NR=$(mktemp -d); touch "$NR/x.ts"
+o=$(printf '{"session_id":"s","tool_input":{"file_path":"%s"}}' "$NR/x.ts" \
+  | env -u CLAUDEIGNORE_NO_GITIGNORE -u CLAUDEIGNORE_DISABLED CLAUDE_PROJECT_DIR="$NR" bash "$HOOK" 2>/dev/null)
+[ -z "$o" ] && ok "unbuildable: a project with no rules is still silent (no false alarm)" \
+            || no "no-rules project should stay silent, got: $o"
+chmod 700 "$RO"; rm -rf "$UB" "$RO" "$NR"
+
 # --- mode switch must invalidate the mirror ------------------------------------------
 # Regression: found in live use, not by this suite. The helpers above pass NO session_id,
 # so _ci_ensure always took the full-rescan branch and rebuilt the mirror under whichever

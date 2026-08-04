@@ -135,6 +135,19 @@ The verdict comes from `check-ignore -q`. With `-v`, git exits **0 for any match
 including a negation**, so `!.env.example` would read as "ignored"; `-v` runs only
 afterwards, to recover which rule matched.
 
+**Symlinks are resolved.** `Read` follows links while the hook matches path strings, so the
+literal path is judged first and the resolved path second — a link to an excluded file is
+denied. Judging the literal path first keeps every denial quoting the rule against the path
+you typed; the resolved path is only ever a second chance to deny, never a first chance to
+allow. A link pointing *outside* the project stays unjudged, since deciding whose rules
+govern another repository's files is a larger question than this guard should answer.
+
+**If the mirror cannot be built, the guard says so.** A read-only or full `$TMPDIR`, a
+hostile umask or a mirror owned by another user used to make enforcement evaporate silently
+— indistinguishable from a project with no rules. It now reports the problem and allows by
+default (a broken scratch directory should not block every read in your project), or denies
+under `CLAUDEIGNORE_STRICT=1` if you would rather lose the tool than the guarantee.
+
 **Provenance.** The merged file would lose the `file:line` pointer, so each directory gets a
 `.ci-split` holding one integer: lines 1..split came from `.gitignore`, the rest from
 `.claudeignore`. Without it a denial names the wrong file — worse than naming none, since it
@@ -200,6 +213,7 @@ immediately.
 | `CLAUDEIGNORE_NO_GITIGNORE` | `0` | `1` = ignore `.gitignore` and `.git/info/exclude`; honour `.claudeignore` alone |
 | `CLAUDEIGNORE_MODE` | `deny` | `warn` = allow the call but attach the reason. Useful while tuning patterns |
 | `CLAUDEIGNORE_QUIET` | `0` | `1` = hide the `SessionStart` notice from **you**; Claude is still told. Use `CLAUDEIGNORE_DISABLED=1` to silence it entirely |
+| `CLAUDEIGNORE_STRICT` | `0` | `1` = **deny** reads when the rule mirror cannot be built, instead of warning and allowing |
 
 ### What the opt-out really costs
 
