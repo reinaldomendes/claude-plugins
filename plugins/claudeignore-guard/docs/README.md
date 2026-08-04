@@ -10,7 +10,7 @@
 > `settings.json` is the boundary. See [Scope](#scope--read-this-before-trusting-it).
 
 **Kind:** hooks · **Activates:** automatically while enabled
-**Source:** [`plugins/claudeignore-guard/`](../)
+**Source:** [`plugins/claudeignore-guard/`](../) · **Also:** [GOTCHAS](./GOTCHAS.md) · [PROPOSALS](./PROPOSALS.md)
 
 ## The problem
 

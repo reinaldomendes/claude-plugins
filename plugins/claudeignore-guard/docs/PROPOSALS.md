@@ -18,7 +18,7 @@ what it claims to cover, or a way to make the honest caveat actionable.
 | ~~3~~ | ~~Generate `permissions.deny` from `.claudeignore`~~ | **declined 0.5.5** | The problem was framed wrongly: the right deny list is 2-3 paths, not a translation of every ignore rule. Replaced by a README section. |
 | ~~4~~ | ~~Scope caveat above the fold~~ | **done 0.5.4** | Callout directly under the tagline, before anything else. |
 | ~~5~~ | ~~Mirror hygiene and identity~~ | **done 0.5.1-0.5.3** | Hijack closed (per-uid 0700), debuggability closed (README.txt), key strengthened (64-bit SHA-1). Collection declined with reason. |
-| 6 | Spike `Grep` redaction via `PostToolUse` | **open** | Deny rules measurably do NOT cover `Bash` on 2.1.220, so the platform does not close this. The `Grep` *tool* remains untested. |
+| 6 | Bash/Grep leak — deny rules do not close it | **open, not scheduled** | Measured, see [GOTCHAS 1](./GOTCHAS.md). A sketch exists (content-surfacing command guard); deliberately not planned further yet. |
 | ~~7~~ | ~~Quote expansions used as patterns~~ | **done 0.5.4 — was NOT a nit** | A project path with `[`/`*`/`?` disabled enforcement entirely and silently. 12 cases added. |
 
 ---
@@ -368,9 +368,18 @@ corrected in the README:
   stands on its main argument: the right deny list is two or three paths you choose
   deliberately, not a translation of an ignore file that is mostly noise control.
 
-**What genuinely remains uncovered**, and is now stated in the README: arbitrary subprocesses
-that open files themselves — a Python or Node script, `docker exec`, anything the shell parser
-does not recognise. The documented answer there is the sandbox, not a hook.
+**What genuinely remains uncovered**, and is now stated in the README: `cat`/`grep` through
+`Bash` (measured — [GOTCHAS 1](./GOTCHAS.md)), and arbitrary subprocesses that open files
+themselves. The documented answer for the latter is the sandbox.
+
+**Sketch, if this is ever picked up.** A `PreToolUse(Bash)` guard firing only when the command's
+first word is a *content-surfacing* reader (`cat`, `head`, `tail`, `less`, `strings`, `xxd`,
+`base64`, `grep`, `sed`, `awk`) **and** an argument resolves to an excluded path. `cat .env`
+blocked; `echo "see .env for details"` allowed — which answers the original objection to
+parsing Bash. Opt-in, or scoped to `.claudeignore` only, because merge mode would otherwise
+refuse `cat node_modules/pkg/package.json`. Keys on behaviour rather than paths, so a secret
+stays *usable* by `pnpm dev` while staying *unread* — see [GOTCHAS 3](./GOTCHAS.md).
+Not planned; premise deserves checking first, as items 3 and 6 both taught.
 
 ## 7. Quote expansions used as patterns
 
